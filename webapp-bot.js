@@ -38,7 +38,7 @@ client.connect({
 async function notifyWebappFromIRC({ channel, from, message }) {
   try {
     // POST verso l'API della webapp per inserire il messaggio nel DB e notificare i client
-    await fetch('http://localhost:3002/api/socketio', {
+    await fetch('http://localhost:3000/api/socketio', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
