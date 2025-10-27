@@ -1,0 +1,155 @@
+/// Prisma schema for IRC Community Web App
+/// Defines models for users, authentication, channels, messages, and roles.
+/// Follows best practices for PostgreSQL and NextAuth.js integration.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id              String          @id @default(cuid())
+  username        String          @unique
+  email           String?         @unique
+  password        String?
+  avatar          String?
+  name            String?
+  isOnline        Boolean         @default(false)
+  roles           String[]        @default(["user"])
+  createdAt       DateTime        @default(now())
+  updatedAt       DateTime        @updatedAt
+  banReason       String?
+  bannedUntil     DateTime?
+  isBanned        Boolean         @default(false)
+  lastSeen        DateTime        @default(now())
+  primaryRole     UserRole        @default(USER)
+
+  githubBio       String?
+  githubLocation  String?
+  githubRepos     Int?
+  githubFollowers Int?
+  githubUrl       String?
+
+  accounts        Account[]
+  channelMembers  ChannelMember[]
+  createdChannels Channel[]       @relation("CreatedChannels")
+  messages        Message[]
+  sessions        Session[]
+
+  @@map("users")
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  user              User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+  @@map("accounts")
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("sessions")
+}
+
+model Channel {
+  id           String          @id @default(cuid())
+  name         String          @unique
+  topic        String?
+  description  String?
+  isPrivate    Boolean         @default(false)
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+  category     ChannelCategory @default(GENERAL)
+  createdBy    String
+  isArchived   Boolean         @default(false)
+  maxMembers   Int?
+  parentId     String?
+  requiredRole String          @default("user")
+  members      ChannelMember[]
+  creator      User            @relation("CreatedChannels", fields: [createdBy], references: [id])
+  parent       Channel?        @relation("ChannelHierarchy", fields: [parentId], references: [id])
+  children     Channel[]       @relation("ChannelHierarchy")
+  messages     Message[]
+
+  @@map("channels")
+}
+
+model ChannelMember {
+  id          String   @id @default(cuid())
+  userId      String
+  channelId   String
+  role        String   @default("member")
+  joinedAt    DateTime @default(now())
+  canBan      Boolean  @default(false)
+  canInvite   Boolean  @default(false)
+  canKick     Boolean  @default(false)
+  canRead     Boolean  @default(true)
+  canWrite    Boolean  @default(true)
+  permissions String[] @default([])
+  channel     Channel  @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, channelId])
+  @@map("channel_members")
+}
+
+model Message {
+  id        String      @id @default(cuid())
+  content   String
+  type      MessageType @default(MESSAGE)
+  userId    String
+  channelId String
+  timestamp DateTime    @default(now())
+  channel   Channel     @relation(fields: [channelId], references: [id], onDelete: Cascade)
+  user      User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("messages")
+}
+
+enum MessageType {
+  MESSAGE
+  JOIN
+  PART
+  QUIT
+  ACTION
+  NOTICE
+  ANNOUNCEMENT
+}
+
+enum ChannelCategory {
+  GENERAL
+  ADMIN
+  MODERATION
+  PRIVATE
+  ARCHIVED
+  GUEST
+  HELP
+}
+
+enum UserRole {
+  USER
+  MODERATOR
+  ADMIN
+  OWNER
+}

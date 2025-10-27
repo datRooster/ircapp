@@ -1,65 +1,158 @@
-import Image from "next/image";
+'use client'
+
+import { useState, useEffect } from 'react'
+import { useSession, signOut } from 'next-auth/react'
+import ChannelSidebar from '../components/ChannelSidebar'
+import ChatWindow from '../components/ChatWindow'
+import AdminPanel from '../components/AdminPanel'
+import { Channel, User } from '../types'
 
 export default function Home() {
+  const { data: session, status } = useSession()
+  const [channels, setChannels] = useState<Channel[]>([])
+  const [currentChannel, setCurrentChannel] = useState<string | null>(null)
+  const [showAdminPanel, setShowAdminPanel] = useState(false)
+  const [loading, setLoading] = useState(true)
+
+  // Carica canali dal database o mostra guest/help se guest
+  const loadChannels = async () => {
+    try {
+      let data
+      if (session?.user) {
+        const response = await fetch('/api/channels')
+        if (response.ok) {
+          data = await response.json()
+        }
+      } else {
+        // Guest: mostra solo canali guest e help
+        const response = await fetch('/api/channels?guest=1')
+        if (response.ok) {
+          data = await response.json()
+        }
+      }
+      setChannels(data?.channels || [])
+      // Se guest, seleziona canale guest di default
+      if (!session?.user && data?.channels?.length) {
+        const guestChan = data.channels.find((c:any) => c.name === 'guest')
+        setCurrentChannel(guestChan?.id || data.channels[0].id)
+      } else if (session?.user && data?.channels?.length) {
+        setCurrentChannel('lobby')
+      }
+    } catch (error) {
+      console.error('Error loading channels:', error)
+    } finally {
+      setLoading(false)
+    }
+  }
+
+  useEffect(() => {
+    loadChannels()
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [session])
+
+  // Utente dalla sessione o guest
+  const isGuest = !session?.user
+  const currentUser: User = {
+    id: session?.user?.id || 'guest',
+    username: (session?.user as any)?.username || session?.user?.name || 'Guest',
+    email: session?.user?.email || undefined,
+    isOnline: true,
+    joinedAt: new Date(),
+    roles: isGuest ? ['guest'] : ((session?.user as any)?.roles || ['user'])
+  }
+
+  // Loading state
+  if (status === 'loading') {
+    return (
+      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
+        <div className="text-white text-xl">Caricamento...</div>
+      </div>
+    )
+  }
+
+  const handleChannelSelect = (channelId: string) => {
+    setCurrentChannel(channelId)
+  }
+
+  const handleCreateChannel = () => {
+    // TODO: Implement channel creation
+    console.log('Creating new channel...')
+  }
+
+  const handleOpenAdminPanel = () => {
+    setShowAdminPanel(true)
+  }
+
+  const handleCloseAdminPanel = () => {
+    setShowAdminPanel(false)
+  }
+
+  const getCurrentChannel = () => {
+    return channels.find(channel => channel.id === currentChannel) || null
+  }
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex min-h-screen w-full max-w-3xl flex-col items-center justify-between py-32 px-16 bg-white dark:bg-black sm:items-start">
-        <Image
-          className="dark:invert"
-          src="/next.svg"
-          alt="Next.js logo"
-          width={100}
-          height={20}
-          priority
+    <div className="flex h-screen bg-gray-900">
+      {/* Header con info utente */}
+      <div className="fixed top-0 right-0 z-50 p-4">
+        <div className="flex items-center space-x-4 bg-gray-800 rounded-lg px-4 py-2">
+          <div className="text-white">
+            <span className="text-sm text-gray-400">Connesso come:</span>
+            <div className="font-semibold">
+              {session?.user ? (
+                <a href="/profile" className="hover:underline text-blue-300">{currentUser.username}</a>
+              ) : (
+                currentUser.username
+              )}
+              {session?.user && ((session?.user as any)?.roles?.includes('admin')) && (
+                <span className="ml-2 text-xs bg-yellow-500 text-black px-2 py-1 rounded">ADMIN</span>
+              )}
+            </div>
+          </div>
+          <button
+            onClick={() => signOut()}
+            className="text-gray-400 hover:text-white text-sm px-3 py-1 border border-gray-600 rounded hover:border-gray-500"
+          >
+            Logout
+          </button>
+        </div>
+      </div>
+
+      <ChannelSidebar
+        channels={channels}
+        currentChannel={currentChannel}
+        onChannelSelect={handleChannelSelect}
+        onCreateChannel={handleCreateChannel}
+        userRole={currentUser.roles.includes('admin') ? 'admin' : currentUser.roles.includes('moderator') ? 'moderator' : isGuest ? 'guest' : 'user'}
+        username={currentUser.username}
+        onOpenAdminPanel={handleOpenAdminPanel}
+      />
+      
+      <div className="flex-1 flex flex-col">
+        {getCurrentChannel() ? (
+          <ChatWindow
+            key={getCurrentChannel()!.id}
+            channel={getCurrentChannel()!}
+            currentUser={currentUser}
+            isGuest={isGuest}
+          />
+        ) : (
+          <div className="flex-1 flex items-center justify-center bg-gray-900 text-white">
+            <div className="text-center">
+              <h2 className="text-2xl font-bold mb-4">Benvenuto in IRC Community</h2>
+              <p className="text-gray-400">Seleziona un canale per iniziare a chattare</p>
+            </div>
+          </div>
+        )}
+      </div>
+      
+      {/* Admin Panel */}
+      {showAdminPanel && (
+        <AdminPanel
+          userRole={currentUser.roles.includes('admin') ? 'admin' : currentUser.roles.includes('moderator') ? 'moderator' : 'user'}
+          onClose={handleCloseAdminPanel}
         />
-        <div className="flex flex-col items-center gap-6 text-center sm:items-start sm:text-left">
-          <h1 className="max-w-xs text-3xl font-semibold leading-10 tracking-tight text-black dark:text-zinc-50">
-            To get started, edit the page.tsx file.
-          </h1>
-          <p className="max-w-md text-lg leading-8 text-zinc-600 dark:text-zinc-400">
-            Looking for a starting point or more instructions? Head over to{" "}
-            <a
-              href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Templates
-            </a>{" "}
-            or the{" "}
-            <a
-              href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-              className="font-medium text-zinc-950 dark:text-zinc-50"
-            >
-              Learning
-            </a>{" "}
-            center.
-          </p>
-        </div>
-        <div className="flex flex-col gap-4 text-base font-medium sm:flex-row">
-          <a
-            className="flex h-12 w-full items-center justify-center gap-2 rounded-full bg-foreground px-5 text-background transition-colors hover:bg-[#383838] dark:hover:bg-[#ccc] md:w-[158px]"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="/vercel.svg"
-              alt="Vercel logomark"
-              width={16}
-              height={16}
-            />
-            Deploy Now
-          </a>
-          <a
-            className="flex h-12 w-full items-center justify-center rounded-full border border-solid border-black/[.08] px-5 transition-colors hover:border-transparent hover:bg-black/[.04] dark:border-white/[.145] dark:hover:bg-[#1a1a1a] md:w-[158px]"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Documentation
-          </a>
-        </div>
-      </main>
+      )}
     </div>
-  );
+  )
 }
