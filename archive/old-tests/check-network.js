@@ -1,5 +1,11 @@
 #!/usr/bin/env node
 
+// Archived: check-network.js
+// Moved to /archive/old-tests for cleanup. See README.md for current diagnostics.
+
+// Original contents preserved below for reference:
+// -----------------------------
+
 import * as os from 'os'
 import { execSync } from 'child_process'
 

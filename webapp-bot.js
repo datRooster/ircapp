@@ -4,6 +4,7 @@
 const irc = require('irc-framework');
 const express = require('express');
 const bodyParser = require('body-parser');
+const crypto = require('crypto');
 
 const IRC_SERVER = '127.0.0.1';
 const IRC_PORT = 6667;
@@ -34,11 +35,47 @@ client.connect({
   auto_reconnect: true,
 });
 
+// Log whether encryption key is available to the bot process
+const BOT_ENC_AVAILABLE = !!process.env.WEBAPP_ENC_KEY
+console.log('[BOT] WEBAPP_ENC_KEY present:', BOT_ENC_AVAILABLE)
+
 // Funzione per notificare la webapp di un nuovo messaggio IRC
-async function notifyWebappFromIRC({ channel, from, message }) {
+async function notifyWebappFromIRC({ channel, from, message, originalMessageId }) {
   try {
     // POST verso l'API della webapp per inserire il messaggio nel DB e notificare i client
-    await fetch('http://localhost:3000/api/socketio', {
+    const webappHost = process.env.WEBAPP_HOST || process.env.NEXTAUTH_URL || 'http://localhost:3002'
+    const url = `${webappHost.replace(/\/$/, '')}/api/socketio`
+    // If WEBAPP_ENC_KEY is set, encrypt the IRC message before sending back to webapp
+    const encKey = process.env.WEBAPP_ENC_KEY || null
+    if (encKey) {
+      try {
+        const key = Buffer.from(encKey, 'base64')
+        const iv = crypto.randomBytes(12)
+        const cipher = crypto.createCipheriv('aes-256-gcm', key, iv)
+        const ciphertext = Buffer.concat([cipher.update(message, 'utf8'), cipher.final()])
+        const tag = cipher.getAuthTag()
+        const combined = Buffer.concat([ciphertext, tag]).toString('base64')
+        await fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            action: 'irc-message',
+            channelId: channel.replace('#', ''),
+            content: combined,
+            from,
+            type: 'irc',
+            encrypted: true,
+            iv: iv.toString('base64')
+            , originalMessageId: originalMessageId || undefined
+          })
+        })
+        return
+      } catch (err) {
+        console.error('[BOT] Error encrypting IRC->webapp message', err)
+        // fallback to plaintext below
+      }
+    }
+    await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -47,6 +84,7 @@ async function notifyWebappFromIRC({ channel, from, message }) {
         content: message,
         from,
         type: 'irc',
+        originalMessageId: originalMessageId || undefined
       })
     })
   } catch (err) {
@@ -63,6 +101,16 @@ client.on('registered', () => {
 
 // Flag per evitare di reimpostare il topic più volte per canale
 const topicSetForChannel = {};
+
+function normalizeForMatch(str) {
+  // Trim, collapse whitespace, remove control characters
+  return String(str).replace(/\s+/g, ' ').trim();
+}
+
+function hashForMatch(str) {
+  const normalized = normalizeForMatch(str);
+  return crypto.createHash('sha256').update(normalized, 'utf8').digest('hex');
+}
 
 client.on('join', (event) => {
   const { channel, nick } = event;
@@ -90,6 +138,22 @@ client.on('message', async (event) => {
   if (nick === IRC_NICK) return;
   // Solo canali pubblici
   if (target && target.startsWith('#')) {
+    // check recent forwards to avoid reposting echoes of messages we just forwarded
+    // Use a hash-based key to be resilient against small formatting differences
+    const hash = hashForMatch(message)
+    const key = `${target}|${hash}`
+    const record = recentForwards.get(key)
+    if (record) {
+      if (Date.now() < record.expires) {
+        console.log(`[BOT] Detected echo for forwarded message on ${target}, notifying webapp with originalMessageId and skipping DB insert (origId=${record.originalMessageId})`)
+        // Notify the webapp but include originalMessageId so the server will skip creating a duplicate
+        await notifyWebappFromIRC({ channel: target, from: nick, message, originalMessageId: record.originalMessageId })
+        recentForwards.delete(key)
+        return
+      }
+      recentForwards.delete(key)
+    }
+
     await notifyWebappFromIRC({ channel: target, from: nick, message });
     console.log(`[BOT] Messaggio IRC da ${nick} su ${target} inoltrato alla webapp.`);
   }
@@ -114,13 +178,49 @@ app.post('/set-topic', (req, res) => {
 // POST /send-irc { channel: '#general', message: 'testo', from: 'usernameWebapp' }
 // Gestione join asincrono: coda di messaggi in attesa per canale
 const pendingMessages = new Map(); // channel -> array di { ircMsg, res }
+// Recent forwarded plaintexts to detect echoes from the IRC server and avoid reposting
+const recentForwards = new Map(); // key -> { originalMessageId, expires }
 
 app.post('/send-irc', (req, res) => {
-  const { channel, message, from } = req.body;
+  const { channel, message, from, originalMessageId } = req.body;
   if (!channel || !message || !from) {
     return res.status(400).json({ error: 'channel, message, from sono obbligatori' });
   }
-  const ircMsg = `[${from}] ${message}`;
+  // If message is encrypted, attempt decryption with key from env
+  let plaintext = message
+  try {
+    if (req.body.encrypted) {
+      if (!process.env.WEBAPP_ENC_KEY) {
+        console.warn('[BOT] Incoming message marked encrypted but no WEBAPP_ENC_KEY is set in bot process')
+        // refuse to forward ciphertext to IRC
+        return res.status(500).json({ error: 'Server misconfigured: missing encryption key' })
+      }
+      const key = Buffer.from(process.env.WEBAPP_ENC_KEY, 'base64')
+      const iv = Buffer.from(req.body.iv, 'base64')
+      const combined = Buffer.from(message, 'base64')
+      // last 16 bytes are auth tag
+      const tag = combined.slice(combined.length - 16)
+      const ciphertext = combined.slice(0, combined.length - 16)
+      const decipher = crypto.createDecipheriv('aes-256-gcm', key, iv)
+      decipher.setAuthTag(tag)
+      plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString('utf8')
+      console.log(`[BOT] Decrypted incoming webapp message from ${from} (preview): ${plaintext.slice(0,120)}`)
+    }
+  } catch (err) {
+    console.error('[BOT] Decrypt failed for incoming webapp message:', err)
+    // Do NOT forward ciphertext to IRC. Return error so sender can retry or admin can inspect.
+    return res.status(500).json({ error: 'Decrypt failed' })
+  }
+
+    const ircMsg = `[${from}] ${plaintext}`;
+  // record this forwarded message (full ircMsg) so that when IRC echoes it back we can detect and skip
+  try {
+    const hash = hashForMatch(ircMsg)
+    const key = `${channel}|${hash}`
+    recentForwards.set(key, { originalMessageId: originalMessageId || null, expires: Date.now() + 10000 })
+  } catch (e) {
+    // ignore
+  }
   const chanObj = client.channel(channel);
   if (chanObj && chanObj.joined) {
     // Già dentro, invia subito

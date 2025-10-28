@@ -1,5 +1,10 @@
 #!/usr/bin/env node
+// Archived test: test-oauth.js
+// Original file moved to /archive/old-tests for repository cleanup.
+// See README.md for current testing and setup instructions.
 
+// Original contents preserved below for reference:
+// -----------------------------
 // Script per testare la configurazione OAuth
 async function testOAuthConfig() {
   console.log('🔐 Testing OAuth Configuration')

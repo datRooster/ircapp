@@ -1,3 +1,9 @@
+// Archived test: test-github-oauth.js
+// Original file moved to /archive/old-tests for repository cleanup.
+// See README.md for current testing and setup instructions.
+
+// Original contents preserved below for reference:
+// -----------------------------
 // Test GitHub OAuth configuration
 import dotenv from 'dotenv'
 dotenv.config({ path: '.env.local' })

@@ -16,6 +16,8 @@
     "irc:dev": "tsx watch src/irc-server/start-server.ts",
     "irc:check": "node check-network.js",
     "dev:full": "concurrently \"npm run dev\" \"npm run irc:dev\"",
+  "bot:start": "node webapp-bot.js",
+  "dev:all": "concurrently \"npm run dev\" \"npm run irc:dev\" \"npm run bot:start\"",
     "setup:local": "node setup-network.js local",
     "setup:network": "node setup-network.js network",
     "oauth:setup": "node setup-oauth.js",

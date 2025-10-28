@@ -1,3 +1,9 @@
+// Archived test: test-database.js
+// Original file moved to /archive/old-tests for repository cleanup.
+// See README.md for current testing and setup instructions.
+
+// Original contents preserved below for reference:
+// -----------------------------
 // Test database connection
 import { PrismaClient } from '@prisma/client'
 

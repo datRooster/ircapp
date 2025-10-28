@@ -117,6 +117,9 @@ model ChannelMember {
 model Message {
   id        String      @id @default(cuid())
   content   String
+  encrypted Boolean     @default(false)
+  iv        String?
+  keyId     String?
   type      MessageType @default(MESSAGE)
   userId    String
   channelId String

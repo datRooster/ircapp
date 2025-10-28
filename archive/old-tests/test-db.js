@@ -1,3 +1,9 @@
+// Archived test: test-db.js
+// Original file moved to /archive/old-tests for repository cleanup.
+// See README.md for current testing and setup instructions.
+
+// Original contents preserved below for reference:
+// -----------------------------
 const { PrismaClient } = require('@prisma/client')
 const bcrypt = require('bcryptjs')
 

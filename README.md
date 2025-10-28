@@ -29,169 +29,152 @@ Una moderna applicazione web per community IRC costruita con le ultime tecnologi
 #### ✅ **Sicurezza di Base**
 - **Sanitizzazione input**: Protezione XSS e injection
 - **Validazione dati**: Controllo rigoroso dei parametri
-- **Crittografia toggle**: Opzione per messaggi crittografati (UI pronta)
-- **Rate limiting**: Prevenzione spam (struttura implementata)
+```markdown
+# IRC Community Web App
 
-#### ✅ **Architettura Tecnica**
-- **Next.js 14**: App Router con TypeScript
-- **Tailwind CSS**: Styling moderno e responsive  
-- **API Routes**: Backend integrato per gestione messaggi
-- **Custom Hooks**: useSocket per gestione connessioni
-- **Type Safety**: TypeScript completo con interfacce definite
+Applicazione web per community IRC che mette insieme Next.js, TypeScript, Tailwind e un bridge verso client IRC testuali.
 
-### 🚀 **CARATTERISTICHE PRINCIPALI OPERATIVE:**
+Questo repository contiene sia la webapp (Next.js App Router) sia il bridge HTTP/IRC (bot) e uno starter per il server IRC locale.
 
-1. **💬 Chat Multi-Canale Funzionante**
-   - Due canali predefiniti: #general e #tech
-   - Messaggi separati per canale con persistenza
-   - Cambio canale istantaneo senza perdita dati
-
-2. **🖥️ Interfaccia Utente Completa**
-   - Sidebar navigazione canali
-   - Finestra chat con scroll automatico  
-   - Input messaggi con controlli crittografia
-   - Indicatori stato connessione
-
-3. **🔒 Funzionalità di Sicurezza**
-   - Toggle crittografia messaggi
-   - Validazione e sanitizzazione completa
-   - Indicatori sicurezza sui messaggi
-   - Gestione errori con feedback utente
-
-4. **⚡ Performance e Stabilità**
-   - Mock Socket.io per evitare errori WebSocket
-   - Gestione stati React ottimizzata
-   - Re-render intelligente dei componenti
-   - Caching messaggi per canale
-
-## 🛠️ Stack Tecnologico IMPLEMENTATO
-
-- **Frontend**: Next.js 14, React 19, TypeScript ✅
-- **Styling**: Tailwind CSS 4 ✅  
-- **Backend**: Next.js API Routes ✅
-- **Database**: In-memory store (pronto per Prisma) ✅
-- **Real-time**: Mock Socket.io con polling ✅
-- **Autenticazione**: NextAuth.js (struttura pronta) ⚙️
-- **State Management**: React Hooks nativi ✅
-
-## 📋 Prerequisiti TESTATI
-
-- Node.js 18+ ✅
-- npm con flag --legacy-peer-deps ✅  
-- Browser moderno con JavaScript ✅
-
-## ⚡ Quick Start FUNZIONANTE
-
-1. **Clona e installa**
-   ```bash
-   git clone <repo-url>
-   cd IRCapp  
-   npm install --legacy-peer-deps
-   ```
-
-2. **Configura ambiente**
-   ```bash
-   # File .env.local già configurato con impostazioni base
-   NEXTAUTH_URL="http://localhost:3002"
-   IRC_ENCRYPTION_KEY="your-key-here"
-   ```
-
-3. **Avvia applicazione**
-   ```bash
-   npm run dev -- --port 3002
-   ```
-
-4. **Testa funzionalità**
-   - Vai su [http://localhost:3002](http://localhost:3002)
-   - Cambia tra canali #general e #tech
-   - Invia messaggi e verifica persistenza
-   - Testa toggle crittografia
-
-## 📁 Struttura Implementata
-
-```
-src/
-├── app/                     # App Router Next.js 14 ✅
-│   ├── api/socketio/        # Mock Socket.io API ✅
-│   ├── globals.css          # Stili Tailwind ✅
-│   ├── layout.tsx           # Layout principale ✅
-│   └── page.tsx             # Homepage con chat ✅
-├── components/              # Componenti React ✅
-│   ├── ChatWindow.tsx       # Chat funzionante ✅
-│   └── ChannelSidebar.tsx   # Sidebar navigazione ✅
-├── hooks/                   # Custom hooks ✅
-│   └── useSocket.ts         # Mock Socket.io ✅
-├── lib/                     # Configurazioni ✅
-│   ├── auth.ts             # NextAuth setup ✅
-│   ├── prisma.ts           # Database client ✅
-│   └── secure-irc.ts       # Protocollo sicurezza ✅
-└── types/                   # TypeScript types ✅
-    ├── index.ts            # Tipi principali ✅
-    └── next-auth.d.ts      # Tipi auth ✅
-```
-
-## 🎯 Funzionalità IRC OPERATIVE
-
-### ✅ **COMPLETAMENTE FUNZIONANTI:**
-- **Canali multipli**: #general e #tech con chat separate
-- **Messaggi real-time**: Invio e ricezione istantanea  
-- **Persistenza**: Messaggi salvati per canale
-- **Interfaccia moderna**: Design professionale responsive
-- **Sicurezza base**: Validazione e sanitizzazione
-- **Gestione errori**: Feedback utente completo
-
-### ⚙️ **IN SVILUPPO:**  
-- **Database PostgreSQL**: Schema Prisma pronto
-- **Autenticazione utenti**: NextAuth configurato
-- **Socket.io reale**: Struttura per WebSocket true
-- **Crittografia end-to-end**: Algoritmi implementati
-
-## 🚧 Testing e Qualità
-
-### ✅ **TESTATO E FUNZIONANTE:**
-- **Hot reloading**: Sviluppo rapido ✅
-- **TypeScript**: Zero errori di compilazione ✅
-- **ESLint**: Code quality verificata ✅
-- **Responsive design**: Mobile e desktop ✅
-- **Error handling**: Gestione robusta errori ✅
-
-## 📦 Deploy Ready
-
-### ✅ **PRONTO PER DEPLOY:**
-- **Build di produzione**: `npm run build` funzionante
-- **Ottimizzazioni**: Next.js bundle optimization
-- **Environment**: Configurazione prod/dev
-- **Static files**: Asset correttamente serviti
-
-### 🌐 **Opzioni Deploy:**
-1. **Vercel**: Un click deploy con GitHub
-2. **Netlify**: Deploy automatico configurato
-3. **Docker**: Dockerfile pronto per container
-4. **Self-hosted**: Server Node.js standard
-
-## 🔧 Maintenance e Monitoring
-
-### ✅ **SISTEMA DI LOG:**
-- **Console logging**: Debug completo client/server
-- **Error tracking**: Errori catturati e loggati  
-- **Performance**: Metriche React e API
-- **User actions**: Tracking interazioni utente
-
-## 🎉 **RISULTATO FINALE:**
-
-**L'applicazione IRC Community è COMPLETAMENTE FUNZIONANTE** con:
-
-- ✅ Chat multi-canale operativa
-- ✅ Interfaccia moderna e responsive  
-- ✅ Sistema messaggi real-time
-- ✅ Sicurezza e validazione
-- ✅ Performance ottimizzate
-- ✅ Deploy ready
-
-**Testa subito su http://localhost:3002 e inizia a chattare!** 🚀
+## Obiettivo di questo repository
+- Fornire un'interfaccia web moderna per canali IRC
+- Permettere sincronizzazione bidirezionale tra webapp e server IRC reale tramite un bridge (bot)
+- Essere deployabile (Vercel / Railway / Docker)
 
 ---
 
-**Ultima modifica**: 23 ottobre 2025  
-**Status**: ✅ **PRODUZIONE READY**  
-**Sviluppato con**: ❤️ Next.js 14 + TypeScript + Tailwind CSS
+## Struttura importante e comandi principali
+
+- `npm run dev` — avvia la webapp in sviluppo (Next.js)
+- `npm run irc:start` — avvia il server IRC (TypeScript starter in `src/irc-server`)
+- `node webapp-bot.js` — avvia il bridge HTTP→IRC (bot) che riceve POST da `/api/socketio`
+- `node webapp-bot.js` — avvia il bridge HTTP→IRC (bot) che riceve POST da `/api/socketio`
+- `npm run dev:full` — (concurrently) esegue webapp + IRC server insieme
+
+Consiglio per sviluppo locale (zsh):
+
+```bash
+# 1) Installa dipendenze
+npm install --legacy-peer-deps
+
+# 2) Avvia il server IRC (in un terminale separato)
+npm run irc:start
+
+# 3) Avvia il bridge bot (in un altro terminale)
+node webapp-bot.js
+
+# 4) Avvia la webapp
+npm run dev -- --port 3002
+
+# Oppure tutto insieme (richiede concurrently)
+npm run dev:full
+```
+
+---
+
+## Come funziona la sincronizzazione (breve)
+
+- La webapp emette eventi (via `useSocket`) che POSTano a `/api/socketio` con `action: 'send-message'`.
+- L'API `/api/socketio` salva il messaggio su Prisma e inoltra al bridge bot su `http://localhost:4000/send-irc`.
+- Il bridge (`webapp-bot.js`) invia il messaggio al server IRC; quando riceve messaggi da IRC li POSTa a `/api/socketio` con `action: 'irc-message'`.
+- `useSocket` polla `/api/socketio` con `action: 'get-messages'` per ottenere nuovi messaggi.
+
+---
+
+## Deployment e note pratiche
+
+1) Vercel
+- Push su GitHub e configura Vercel per il repo. Assicurati di impostare le variabili d'ambiente nel progetto Vercel (es. `DATABASE_URL`, `NEXTAUTH_SECRET`, provider OAuth).
+
+2) Railway / Server con PostgreSQL
+- Se usi Railway, aggiungi PostgreSQL e imposta le variabili elencate nella sezione "Railway / Production" qui sotto.
+
+3) Avviare servizi in produzione
+- On Vercel la parte bot/bridge non gira automaticamente: in produzione raccomando di eseguire il bot come servizio separato (Heroku, Railway, Docker container o VM) che faccia listen sulla porta 4000 e possa comunicare con la webapp tramite HTTPS.
+
+---
+
+## Railway / Production (sintesi)
+
+Variabili ambiente importanti da impostare in produzione:
+
+```env
+DATABASE_URL=postgresql://...
+NEXTAUTH_SECRET=your-super-secret-key
+NEXTAUTH_URL=https://your-app.domain
+GITHUB_CLIENT_ID=...
+GITHUB_CLIENT_SECRET=...
+ADMIN_EMAIL=admin@yourdomain
+```
+
+Eseguire le migrazioni Prisma in produzione:
+
+```bash
+npx prisma migrate deploy
+npx prisma generate
+```
+
+Environment variables utili per il bot
+- `WEBAPP_HOST` — URL (incluso protocollo e porta) della webapp per le notifiche IRC→webapp (es. `http://localhost:3002`). Se non impostato il bot userà `http://localhost:3002`.
+
+### Cifratura end-to-end (opzione bot-decrypt)
+
+Questo progetto supporta ora un flusso "bot-decrypt" per i messaggi contrassegnati come cifrati dalla webapp:
+
+- Impostare la variabile d'ambiente `WEBAPP_ENC_KEY` con una chiave AES-256 (32 byte) codificata in base64. Esempio generazione:
+
+```bash
+# Genera 32 bytes e stampa base64
+openssl rand -base64 32
+```
+
+- In ambienti di sviluppo è possibile mettere `WEBAPP_ENC_KEY` nel file `.env` (ma in produzione usare secret manager).
+- Flusso:
+	- Il client web cifra il messaggio con AES-256-GCM usando la chiave ottenuta dall'endpoint protetto `/api/keys` e invia `content` (base64 ciphertext) + `iv` + `encrypted: true` a `/api/socketio`.
+	- L'API salva il messaggio cifrato e inoltra il payload al bot (includendo `encrypted` e `iv`).
+	- Il bot (se `WEBAPP_ENC_KEY` è impostata) decripta il messaggio e invia il plaintext su IRC, mantenendo una UX compatibile con client IRC tradizionali.
+	- Quando il bot riceve messaggi da IRC li cifra e li POSTa a `/api/socketio` (se `WEBAPP_ENC_KEY` configurata), così la webapp riceve payload cifrati e li decifra client-side.
+
+Nota importante di sicurezza:
+- Questo approccio NON è E2E dal punto di vista strettissimo: il bot possiede la chiave e può leggere i plaintext. Per E2E reale occorre un sistema di gestione chiavi più complesso (chiavi per utente, scambio di chiavi, plugin per client IRC esterni) e non fornito qui.
+- Assicurati di memorizzare `WEBAPP_ENC_KEY` in un secret manager (es. Vercel Secrets, Railway secrets, HashiCorp Vault) in produzione. Non committare la chiave nel repo.
+
+Migrazione Prisma:
+- Abbiamo aggiunto i campi `encrypted`, `iv` e `keyId` al modello `Message`. Dopo pull/merge esegui le migrazioni e genera il client Prisma:
+
+```bash
+npx prisma migrate dev --name add-encryption-fields
+npx prisma generate
+```
+
+
+---
+
+## Developer notes (consolidate)
+
+- Use TypeScript and Tailwind for new components
+- Keep server-side auth checks tramite `src/lib/auth.ts`
+- Evitare log debug eccessivi in produzione; preferisci logger con livelli
+
+---
+
+## File rimossi/unificati in questa pulizia
+
+- Il contenuto di `RAILWAY_SETUP.md` e `.github/copilot-instructions.md` è stato consolidato qui.
+- Alcuni file di test di setup locali hanno been archiviati o rimossi (vedi git history).
+
+---
+
+## Conclusione
+
+Ho consolidato la documentazione principale in questo `README.md`. Per il deploy su Vercel ricorda di esporre il bot come servizio separato e di impostare le variabili d'ambiente. Se vuoi, posso:
+
+- Aggiungere script npm per avviare bot e IRC server insieme con PM2 / Docker
+- Commitare ulteriori pulizie (rimuovere file test locali) o archiviarli in `./archive`
+
+---
+
+_Ultima modifica automatica: 27 ottobre 2025_
+
+```
+- **Autenticazione utenti**: NextAuth configurato
