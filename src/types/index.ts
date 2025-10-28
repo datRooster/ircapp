@@ -29,7 +29,10 @@ export interface Message {
   channelId: string;
   channel: Channel;
   timestamp: Date;
-  type: 'message' | 'join' | 'part' | 'quit' | 'action' | 'notice' | 'announcement';
+  type: "notice" | "message" | "join" | "part" | "quit" | "action" | "announcement";
+  encrypted?: boolean;
+  // aggiungi questa riga:
+  localEcho?: boolean;
 }
 
 export interface IRCServer {

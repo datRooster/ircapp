@@ -6,33 +6,38 @@ export async function GET() {
 }
 
 export async function POST(req: NextRequest) {
+  // RIMOSSI log su variabili non ancora dichiarate
   try {
-    const data = await req.json();
+  const data = await req.json();
     const { content, userId, channelId, action, encrypted } = data;
 
     // Handle IRC-originated messages (bot -> webapp)
   if (action === 'irc-message') {
+    // Log di debug solo dentro il blocco dove data, user e content sono disponibili
+    console.log('[API][DEBUG] Payload ricevuto:', JSON.stringify(data))
       // Messaggio proveniente da IRC esterno (via bot)
-      const from = data.from || 'irc-guest';
 
-      // If this irc-message is actually an echo of a webapp-originated message,
-      // the bot can pass originalMessageId so we avoid re-creating the same message.
+      // Usa realFrom per il mapping utente (mittente reale)
+      const realFrom = data.realFrom || data.from || 'irc-guest';
       if (data.originalMessageId) {
         // Found an echo: skip creating duplicate
         return NextResponse.json({ success: true, skipped: true, originalMessageId: data.originalMessageId })
       }
-
-      // 1. Trova o crea utente "irc-<from>"
-      let user = await prisma.user.findUnique({ where: { username: from } });
+      // 1. Trova o crea utente reale (no "irc-" prefix)
+      let user = await prisma.user.findUnique({ where: { username: realFrom } });
       if (!user) {
         user = await prisma.user.create({
           data: {
-            username: from,
-            email: `${from}@irc.local`,
+            username: realFrom,
+            email: `${realFrom}@irc.local`,
             isOnline: false,
             roles: ['irc'],
           },
         });
+      }
+      // Log di debug dopo che user e data sono disponibili
+      if (user && data && typeof data.content !== 'undefined') {
+        console.log('[API][DEBUG] Salvo messaggio: content=', data.content, 'user=', user.username, 'encrypted:', true)
       }
 
       // 2. Trova o crea canale
@@ -94,11 +99,12 @@ export async function POST(req: NextRequest) {
         }
       }
 
-      // 4. Salva messaggio nel database (nessun duplicato rilevato)
-  const message = await (prisma as any).message.create({
+      // 4. Salva messaggio cifrato nel database
+      console.log('[API][DEBUG] Salvo messaggio: content=', data.content, 'user=', user?.username, 'encrypted:', true)
+      const message = await (prisma as any).message.create({
         data: {
-          content: content,
-          encrypted: !!data.encrypted,
+          content: data.content, // deve essere base64 cifrato
+          encrypted: true,
           iv: typeof data.iv === 'string' ? data.iv : null,
           keyId: typeof data.keyId === 'string' ? data.keyId : null,
           userId: user.id,
@@ -128,107 +134,36 @@ export async function POST(req: NextRequest) {
 
     // Handle webapp-originated messages (webapp -> bot)
   if (action === 'send-message') {
-        // 1. Verifica utente: supporta userId oppure username (dev-friendly)
-        let user = null as any
-        if (userId) {
-          user = await prisma.user.findUnique({ where: { id: userId } })
-        }
-        // se non c'è userId o l'utente non esiste, prova a usare `username` per trovare/creare
-        if (!user && typeof data.username === 'string') {
-          user = await prisma.user.findUnique({ where: { username: data.username } })
-          if (!user) {
-            user = await prisma.user.create({
-              data: {
-                username: data.username,
-                email: `${data.username}@local`,
-                isOnline: true,
-                roles: ['user'],
-              }
-            })
-          }
-        }
-
-        if (!user) {
-          return NextResponse.json({ error: 'User not found' }, { status: 404 });
-        }
-
-      // 2. Verifica/crea canale
-      let channel = await prisma.channel.findUnique({ where: { id: channelId } });
-      if (!channel) {
-        channel = await prisma.channel.findUnique({ where: { name: channelId } });
-        if (!channel) {
-          channel = await prisma.channel.create({
-            data: {
-              id: channelId,
-              name: channelId,
-              description: `Canale ${channelId}`,
-              isPrivate: false,
-              creator: { connect: { id: user.id } },
-            },
-          });
-        }
-      }
-
-      // 3. Salva messaggio nel database
-      const authorId = user.id
-      const message = await (prisma as any).message.create({
-        data: {
-          content,
-          encrypted: !!encrypted,
-          iv: typeof data.iv === 'string' ? data.iv : null,
-          keyId: typeof data.keyId === 'string' ? data.keyId : null,
-          userId: authorId,
-          channelId: channel.id,
-          type: 'MESSAGE',
-        },
-        include: {
-          user: { select: { id: true, username: true, avatar: true, roles: true } },
-          channel: { select: { id: true, name: true } },
-        },
-      });
-
-      // 4. Inoltra al bot HTTP bridge
-      try {
-        const channelName = channel.name.startsWith('#') ? channel.name : `#${channel.name}`;
-        const res = await fetch('http://localhost:4000/send-irc', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-              channel: channelName,
-              message: content,
-              from: user.username,
+    // La webapp non salva più il messaggio nel DB, ma lo inoltra solo al bot bridge
+    // (il messaggio verrà salvato solo quando il bot lo notificherà come irc-message)
+    // 1. Inoltra al bot HTTP bridge
+    try {
+      const res = await fetch('http://localhost:4000/send-irc', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          channel: channelId.startsWith('#') ? channelId : `#${channelId}`,
+          message: content,
+          from: data.username,
           encrypted: !!encrypted,
           iv: typeof data.iv === 'string' ? data.iv : undefined,
-          keyId: typeof data.keyId === 'string' ? data.keyId : undefined,
-          // include original message id so the bot can correlate echoes
-          originalMessageId: message.id,
-            }),
-        });
-        if (!res.ok) {
-          const errText = await res.text();
-          console.error('❌ Bridge webapp→IRC HTTP error:', errText);
-        } else {
-          console.log('[BRIDGE] Messaggio inoltrato al bot bridge HTTP');
-        }
-      } catch (err) {
-        console.error('❌ Bridge webapp→IRC HTTP error:', err);
+          keyId: typeof data.keyId === 'string' ? data.keyId : undefined
+        }),
+      });
+      if (!res.ok) {
+        const errText = await res.text();
+        console.error('❌ Bridge webapp→IRC HTTP error:', errText);
+        return NextResponse.json({ error: 'Bridge error', details: errText }, { status: 500 });
+      } else {
+        console.log('[BRIDGE] Messaggio inoltrato al bot bridge HTTP');
       }
-
-      return NextResponse.json({
-        success: true,
-        message: {
-          id: message.id,
-          content: message.content,
-          userId: message.userId,
-          channelId: message.channelId,
-          timestamp: message.timestamp,
-          user: message.user,
-          channel: message.channel,
-          type: message.type,
-          encrypted: encrypted || false,
-        }
-      })
+    } catch (err) {
+      console.error('❌ Bridge webapp→IRC HTTP error:', err);
+      return NextResponse.json({ error: 'Bridge error', details: String(err) }, { status: 500 });
     }
+    // Risposta "optimistic" per la webapp: il messaggio sarà visibile solo quando torna da IRC
+    return NextResponse.json({ success: true });
+  }
 
     if (action === 'get-messages') {
       // Carica messaggi dal database

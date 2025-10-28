@@ -16,7 +16,8 @@ export default function ChatWindow({ channel, currentUser, isGuest }: ChatWindow
   const [messages, setMessages] = useState<Message[]>([])
   const [isLoaded, setIsLoaded] = useState(false)
   const [newMessage, setNewMessage] = useState('')
-  const [encryptMessages, setEncryptMessages] = useState(false)
+  // La cifratura è sempre attiva
+  const encryptMessages = true
   const { available: cryptoAvailable, encrypt, decrypt } = useEncryption()
   const [selectedMessages, setSelectedMessages] = useState<Set<string>>(new Set())
   const [selectAll, setSelectAll] = useState(false)
@@ -54,7 +55,7 @@ export default function ChatWindow({ channel, currentUser, isGuest }: ChatWindow
       try {
         const res = await fetch(`/api/messages/${id}`, { method: 'DELETE' });
         // Non gestiamo errori singoli, UX enterprise: best effort
-      } catch {}
+      } catch { }
     }
     setMessages(prev => prev.filter(m => !selectedMessages.has(m.id)));
     setSelectedMessages(new Set());
@@ -75,7 +76,7 @@ export default function ChatWindow({ channel, currentUser, isGuest }: ChatWindow
   useEffect(() => {
     const loadChannelMessages = async () => {
       console.log(`🔄 Loading messages for channel: ${channel.id}`)
-      
+
       try {
         // Per il canale lobby, carica messaggi pre-definiti
         if (channel.id === 'lobby') {
@@ -85,14 +86,14 @@ export default function ChatWindow({ channel, currentUser, isGuest }: ChatWindow
           console.log(`✅ Loaded ${lobbyMessages.length} lobby messages`)
           return
         }
-        
+
         // Per altri canali, carica dal server
         const response = await fetch('/api/socketio', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action: 'get-messages', channelId: channel.id })
         })
-        
+
         const result = await response.json()
         const existingMessages = result.messages || []
 
@@ -110,14 +111,14 @@ export default function ChatWindow({ channel, currentUser, isGuest }: ChatWindow
           }
           processedMessages.push(msg)
         }
-        
+
         // Messaggio di benvenuto per il canale
         const welcomeMessage: Message = {
           id: `welcome-${channel.id}`,
           content: `Benvenuto nel canale #${channel.name}! ${existingMessages.length > 0 ? `Ci sono ${existingMessages.length} messaggi precedenti.` : 'Inizia la conversazione!'}`,
           userId: 'system',
-          user: { 
-            id: 'system', 
+          user: {
+            id: 'system',
             username: 'Sistema',
             isOnline: true,
             joinedAt: new Date(),
@@ -128,11 +129,11 @@ export default function ChatWindow({ channel, currentUser, isGuest }: ChatWindow
           timestamp: new Date(),
           type: 'notice'
         }
-        
-  // Combina messaggio di benvenuto + messaggi esistenti
-  setMessages([welcomeMessage, ...processedMessages])
+
+        // Combina messaggio di benvenuto + messaggi esistenti
+        setMessages([welcomeMessage, ...processedMessages])
         console.log(`✅ Loaded ${existingMessages.length} messages for #${channel.name}`)
-        
+
       } catch (error) {
         console.error('❌ Error loading messages:', error)
         // Fallback al messaggio di benvenuto
@@ -140,8 +141,8 @@ export default function ChatWindow({ channel, currentUser, isGuest }: ChatWindow
           id: `welcome-${channel.id}`,
           content: `Benvenuto nel canale #${channel.name}! Prova a inviare un messaggio.`,
           userId: 'system',
-          user: { 
-            id: 'system', 
+          user: {
+            id: 'system',
             username: 'Sistema',
             isOnline: true,
             joinedAt: new Date(),
@@ -155,7 +156,7 @@ export default function ChatWindow({ channel, currentUser, isGuest }: ChatWindow
         setMessages([welcomeMessage])
       }
     }
-    
+
     loadChannelMessages()
     setIsLoaded(true)
   }, [channel.id, channel.name]) // Ricarica quando cambia canale
@@ -173,7 +174,7 @@ export default function ChatWindow({ channel, currentUser, isGuest }: ChatWindow
     // Listener per nuovi messaggi del canale specifico
     const handleNewMessage = async (message: Message) => {
       console.log('📨 Received message for channel check:', message.channelId, 'current:', channel.id)
-      
+
       // Controlla che il messaggio sia per il canale corrente
       if (message.channelId === channel.id) {
         console.log('✅ Message is for current channel, adding to chat')
@@ -182,20 +183,24 @@ export default function ChatWindow({ channel, currentUser, isGuest }: ChatWindow
           try {
             const plaintext = await decrypt((message as any).content, (message as any).iv, channel.id)
             message.content = plaintext
-            ;(message as any).encrypted = false
+              ; (message as any).encrypted = false
           } catch (err) {
             console.error('Decrypt failed for incoming message', err)
           }
         }
 
         setMessages(prev => {
-          // Evita duplicati
-          const exists = prev.find(m => m.id === message.id)
+          // Evita duplicati: se esiste già un messaggio con stesso id o stesso contenuto inviato localmente, non aggiungerlo
+          const exists = prev.find(m => m.id === message.id || (m.localEcho && m.content === message.content && m.userId === message.userId))
           if (exists) {
-            console.log('⚠️ Message already exists, skipping')
+            console.log('⚠️ Message already exists or is local echo, skipping')
+            // Se il messaggio locale era un echo, sostituiscilo con quello \"ufficiale\" dal server
+            if (exists.localEcho && message.id && !message.localEcho) {
+              return prev.map(m => m === exists ? { ...message, encrypted: false, localEcho: false } : m)
+            }
             return prev
           }
-          return [...prev, message]
+          return [...prev, { ...message, encrypted: false, localEcho: false }]
         })
       } else {
         console.log('ℹ️ Message is for different channel, ignoring')
@@ -237,38 +242,23 @@ export default function ChatWindow({ channel, currentUser, isGuest }: ChatWindow
         return
       }
     }
-    ;(async () => {
+    ; (async () => {
       try {
-        if (encryptMessages) {
-          // Use centralized encrypt helper (client-side if available, server fallback otherwise)
-          const { content, iv } = await encrypt(newMessage, channel.id)
-
-          console.log('Sending encrypted message')
-          socket.emit('send-message', {
-            content,
-            userId: currentUser.id,
-            channelId: channel.id,
-            username: currentUser.username,
-            encrypted: true,
-            iv
-          })
-          setNewMessage('')
-        } else {
-          console.log('Sending message:', {
-            content: newMessage,
-            userId: currentUser.id,
-            channelId: channel.id,
-            username: currentUser.username
-          })
-          socket.emit('send-message', {
-            content: newMessage,
-            userId: currentUser.id,
-            channelId: channel.id,
-            username: currentUser.username,
-            encrypted: false
-          })
-          setNewMessage('')
-        }
+        // Cifratura sempre attiva
+        const { content, iv } = await encrypt(newMessage, channel.id)
+        console.log('Sending encrypted message')
+        // Non aggiungere localEcho: il messaggio verrà mostrato solo quando arriva l'echo dal server/bot
+        // Invia sempre il nome canale IRC (es. #devtest) come channelId
+        const channelName = channel.name.startsWith('#') ? channel.name : `#${channel.name}`
+        socket.emit('send-message', {
+          content,
+          userId: currentUser.id,
+          channelId: channelName,
+          username: currentUser.username,
+          encrypted: true,
+          iv
+        })
+        setNewMessage('')
       } catch (err) {
         console.error('❌ Encryption/send error', err)
         alert('Errore durante l\'invio cifrato del messaggio')
@@ -452,27 +442,9 @@ export default function ChatWindow({ channel, currentUser, isGuest }: ChatWindow
         })() || (
           <>
             <div className="mb-2 flex items-center space-x-4">
-                <label className="flex items-center space-x-2 text-sm text-gray-300">
-                  <input
-                    type="checkbox"
-                    checked={encryptMessages}
-                    onChange={(e) => {
-                      if (e.target.checked && !cryptoAvailable) {
-                        alert('La crittografia non è supportata da questo browser o è disabilitata. Usa un browser più recente che supporti Web Crypto API (AES-GCM).')
-                        return
-                      }
-                      setEncryptMessages(e.target.checked)
-                    }}
-                    disabled={!cryptoAvailable}
-                    className="rounded border-gray-600 bg-gray-700 text-blue-500 focus:ring-blue-500"
-                  />
-                  <span>🔒 Messaggi crittografati</span>
-                </label>
-              <span className="text-xs text-gray-400">
-                  {encryptMessages ? 'I messaggi saranno crittografati end-to-end' : 'Messaggi in chiaro'}
-                  {!cryptoAvailable && (
-                    <div className="text-xs text-yellow-400">Attenzione: il tuo browser non supporta la cifratura client-side. La checkbox è disabilitata.</div>
-                  )}
+              <span className="text-sm text-blue-400 flex items-center gap-2">
+                <span>🔒</span>
+                <span>I messaggi sono sempre crittografati end-to-end</span>
               </span>
             </div>
             <div className="flex space-x-2">
@@ -480,7 +452,7 @@ export default function ChatWindow({ channel, currentUser, isGuest }: ChatWindow
                 type="text"
                 value={newMessage}
                 onChange={(e) => setNewMessage(e.target.value)}
-                placeholder={`Messaggio #${channel.name}${encryptMessages ? ' (crittografato)' : ''}`}
+                placeholder={`Messaggio #${channel.name} (crittografato)`}
                 className="flex-1 bg-gray-700 text-white rounded-lg px-4 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500"
                 maxLength={1000}
               />
@@ -489,7 +461,7 @@ export default function ChatWindow({ channel, currentUser, isGuest }: ChatWindow
                 disabled={!newMessage.trim()}
                 className="bg-blue-500 hover:bg-blue-600 disabled:bg-gray-600 text-white px-6 py-2 rounded-lg font-medium transition-colors flex items-center space-x-1"
               >
-                {encryptMessages && <span>🔒</span>}
+                <span>🔒</span>
                 <span>Invia</span>
               </button>
             </div>

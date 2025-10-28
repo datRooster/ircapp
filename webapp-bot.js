@@ -42,53 +42,44 @@ console.log('[BOT] WEBAPP_ENC_KEY present:', BOT_ENC_AVAILABLE)
 // Funzione per notificare la webapp di un nuovo messaggio IRC
 async function notifyWebappFromIRC({ channel, from, message, originalMessageId }) {
   try {
-    // POST verso l'API della webapp per inserire il messaggio nel DB e notificare i client
-    const webappHost = process.env.WEBAPP_HOST || process.env.NEXTAUTH_URL || 'http://localhost:3002'
-    const url = `${webappHost.replace(/\/$/, '')}/api/socketio`
-    // If WEBAPP_ENC_KEY is set, encrypt the IRC message before sending back to webapp
-    const encKey = process.env.WEBAPP_ENC_KEY || null
-    if (encKey) {
-      try {
-        const key = Buffer.from(encKey, 'base64')
-        const iv = crypto.randomBytes(12)
-        const cipher = crypto.createCipheriv('aes-256-gcm', key, iv)
-        const ciphertext = Buffer.concat([cipher.update(message, 'utf8'), cipher.final()])
-        const tag = cipher.getAuthTag()
-        const combined = Buffer.concat([ciphertext, tag]).toString('base64')
-        await fetch(url, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            action: 'irc-message',
-            channelId: channel.replace('#', ''),
-            content: combined,
-            from,
-            type: 'irc',
-            encrypted: true,
-            iv: iv.toString('base64')
-            , originalMessageId: originalMessageId || undefined
-          })
-        })
-        return
-      } catch (err) {
-        console.error('[BOT] Error encrypting IRC->webapp message', err)
-        // fallback to plaintext below
-      }
+    // Estrai realFrom se il messaggio è nel formato [username] messaggio
+    let realFrom = from;
+    const match = message.match(/^\[([^\]]+)\]/);
+    if (match) {
+      realFrom = match[1];
     }
+    // Forza cifratura SEMPRE
+    const encKey = process.env.WEBAPP_ENC_KEY;
+    if (!encKey) {
+      throw new Error('WEBAPP_ENC_KEY non impostata nel bot');
+    }
+    const key = Buffer.from(encKey, 'base64');
+    const iv = crypto.randomBytes(12);
+    const cipher = crypto.createCipheriv('aes-256-gcm', key, iv);
+    const ciphertext = Buffer.concat([cipher.update(message, 'utf8'), cipher.final()]);
+    const tag = cipher.getAuthTag();
+    const combined = Buffer.concat([ciphertext, tag]).toString('base64');
+    console.log('[BOT][DEBUG] INVIO content cifrato base64:', combined);
+    // POST verso l'API della webapp per inserire il messaggio nel DB e notificare i client
+    const webappHost = process.env.WEBAPP_HOST || process.env.NEXTAUTH_URL || 'http://localhost:3002';
+    const url = `${webappHost.replace(/\/$/, '')}/api/socketio`;
     await fetch(url, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
         action: 'irc-message',
         channelId: channel.replace('#', ''),
-        content: message,
+        content: combined, // SOLO cifrato
         from,
+        realFrom,
         type: 'irc',
+        encrypted: true,
+        iv: iv.toString('base64'),
         originalMessageId: originalMessageId || undefined
       })
-    })
+    });
   } catch (err) {
-    console.error('[BOT] Errore notifica webapp:', err)
+    console.error('[BOT] Errore notifica webapp:', err);
   }
 }
 
@@ -145,9 +136,8 @@ client.on('message', async (event) => {
     const record = recentForwards.get(key)
     if (record) {
       if (Date.now() < record.expires) {
-        console.log(`[BOT] Detected echo for forwarded message on ${target}, notifying webapp with originalMessageId and skipping DB insert (origId=${record.originalMessageId})`)
-        // Notify the webapp but include originalMessageId so the server will skip creating a duplicate
-        await notifyWebappFromIRC({ channel: target, from: nick, message, originalMessageId: record.originalMessageId })
+        // Se il messaggio è un echo di un messaggio originato dalla webapp, NON notificare la webapp (niente echo)
+        console.log(`[BOT] Detected echo for forwarded message on ${target}, skipping notifyWebapp (origId=${record.originalMessageId})`)
         recentForwards.delete(key)
         return
       }
