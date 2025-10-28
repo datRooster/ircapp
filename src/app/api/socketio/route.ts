@@ -8,13 +8,15 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   // RIMOSSI log su variabili non ancora dichiarate
   try {
-  const data = await req.json();
+    const data = await req.json();
     const { content, userId, channelId, action, encrypted } = data;
 
+    console.log(`[API] Action: ${action}, Channel: ${channelId}, User: ${userId || data.username}, content: ${content}, encrypted: ${encrypted}`);
+    
     // Handle IRC-originated messages (bot -> webapp)
-  if (action === 'irc-message') {
-    // Log di debug solo dentro il blocco dove data, user e content sono disponibili
-    console.log('[API][DEBUG] Payload ricevuto:', JSON.stringify(data))
+    if (action === 'irc-message') {
+      // Log di debug solo dentro il blocco dove data, user e content sono disponibili
+      console.log('[API][DEBUG] Payload ricevuto:', JSON.stringify(data))
       // Messaggio proveniente da IRC esterno (via bot)
 
       // Usa realFrom per il mapping utente (mittente reale)
@@ -133,37 +135,37 @@ export async function POST(req: NextRequest) {
     }
 
     // Handle webapp-originated messages (webapp -> bot)
-  if (action === 'send-message') {
-    // La webapp non salva più il messaggio nel DB, ma lo inoltra solo al bot bridge
-    // (il messaggio verrà salvato solo quando il bot lo notificherà come irc-message)
-    // 1. Inoltra al bot HTTP bridge
-    try {
-      const res = await fetch('http://localhost:4000/send-irc', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          channel: channelId.startsWith('#') ? channelId : `#${channelId}`,
-          message: content,
-          from: data.username,
-          encrypted: !!encrypted,
-          iv: typeof data.iv === 'string' ? data.iv : undefined,
-          keyId: typeof data.keyId === 'string' ? data.keyId : undefined
-        }),
-      });
-      if (!res.ok) {
-        const errText = await res.text();
-        console.error('❌ Bridge webapp→IRC HTTP error:', errText);
-        return NextResponse.json({ error: 'Bridge error', details: errText }, { status: 500 });
-      } else {
-        console.log('[BRIDGE] Messaggio inoltrato al bot bridge HTTP');
+    if (action === 'send-message') {
+      // La webapp non salva più il messaggio nel DB, ma lo inoltra solo al bot bridge
+      // (il messaggio verrà salvato solo quando il bot lo notificherà come irc-message)
+      // 1. Inoltra al bot HTTP bridge
+      try {
+        const res = await fetch('http://localhost:4000/send-irc', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            channel: channelId.startsWith('#') ? channelId : `#${channelId}`,
+            message: content,
+            from: data.username,
+            encrypted: !!encrypted,
+            iv: typeof data.iv === 'string' ? data.iv : undefined,
+            keyId: typeof data.keyId === 'string' ? data.keyId : undefined
+          }),
+        });
+        if (!res.ok) {
+          const errText = await res.text();
+          console.error('❌ Bridge webapp→IRC HTTP error:', errText);
+          return NextResponse.json({ error: 'Bridge error', details: errText }, { status: 500 });
+        } else {
+          console.log('[BRIDGE] Messaggio inoltrato al bot bridge HTTP');
+        }
+      } catch (err) {
+        console.error('❌ Bridge webapp→IRC HTTP error:', err);
+        return NextResponse.json({ error: 'Bridge error', details: String(err) }, { status: 500 });
       }
-    } catch (err) {
-      console.error('❌ Bridge webapp→IRC HTTP error:', err);
-      return NextResponse.json({ error: 'Bridge error', details: String(err) }, { status: 500 });
+      // Risposta "optimistic" per la webapp: il messaggio sarà visibile solo quando torna da IRC
+      return NextResponse.json({ success: true });
     }
-    // Risposta "optimistic" per la webapp: il messaggio sarà visibile solo quando torna da IRC
-    return NextResponse.json({ success: true });
-  }
 
     if (action === 'get-messages') {
       // Carica messaggi dal database

@@ -64,7 +64,7 @@ npm run irc:start
 node webapp-bot.js
 
 # 4) Avvia la webapp
-npm run dev -- --port 3002
+npm run dev -- --port 3000
 
 # Oppure tutto insieme (richiede concurrently)
 npm run dev:full
@@ -115,7 +115,7 @@ npx prisma generate
 ```
 
 Environment variables utili per il bot
-- `WEBAPP_HOST` — URL (incluso protocollo e porta) della webapp per le notifiche IRC→webapp (es. `http://localhost:3002`). Se non impostato il bot userà `http://localhost:3002`.
+- `WEBAPP_HOST` — URL (incluso protocollo e porta) della webapp per le notifiche IRC→webapp (es. `http://localhost:`). Se non impostato il bot userà `http://localhost:3000`.
 
 ### Cifratura end-to-end (opzione bot-decrypt)
 
