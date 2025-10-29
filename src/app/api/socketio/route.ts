@@ -11,128 +11,7 @@ export async function POST(req: NextRequest) {
     const data = await req.json();
     const { content, userId, channelId, action, encrypted } = data;
 
-    console.log(`[API] Action: ${action}, Channel: ${channelId}, User: ${userId || data.username}, content: ${content}, encrypted: ${encrypted}`);
-    
-    // Handle IRC-originated messages (bot -> webapp)
-    if (action === 'irc-message') {
-      // Log di debug solo dentro il blocco dove data, user e content sono disponibili
-      console.log('[API][DEBUG] Payload ricevuto:', JSON.stringify(data))
-      // Messaggio proveniente da IRC esterno (via bot)
-
-      // Usa realFrom per il mapping utente (mittente reale)
-      const realFrom = data.realFrom || data.from || 'irc-guest';
-      if (data.originalMessageId) {
-        // Found an echo: skip creating duplicate
-        return NextResponse.json({ success: true, skipped: true, originalMessageId: data.originalMessageId })
-      }
-      // 1. Trova o crea utente reale (no "irc-" prefix)
-      let user = await prisma.user.findUnique({ where: { username: realFrom } });
-      if (!user) {
-        user = await prisma.user.create({
-          data: {
-            username: realFrom,
-            email: `${realFrom}@irc.local`,
-            isOnline: false,
-            roles: ['irc'],
-          },
-        });
-      }
-      // Log di debug dopo che user e data sono disponibili
-      if (user && data && typeof data.content !== 'undefined') {
-        console.log('[API][DEBUG] Salvo messaggio: content=', data.content, 'user=', user.username, 'encrypted:', true)
-      }
-
-      // 2. Trova o crea canale
-      let channel = await prisma.channel.findUnique({ where: { id: channelId } });
-      if (!channel) {
-        // maybe a channel exists with the same name but different id (unique name constraint)
-        channel = await prisma.channel.findUnique({ where: { name: channelId } });
-        if (!channel) {
-          channel = await prisma.channel.create({
-            data: {
-              id: channelId,
-              name: channelId,
-              description: `Canale ${channelId}`,
-              isPrivate: false,
-              creator: { connect: { id: user.id } },
-            },
-          });
-        }
-      }
-
-      // 3. Evita duplicati: se un messaggio identico (o echo del bot) è stato creato pochi
-      // secondi prima dalla webapp, non reinserirlo. Questo previene l'echo webapp->IRC->webapp.
-      const fiveSecAgo = new Date(Date.now() - 5000);
-      // Se il messaggio arriva nel formato "[username] originalMessage", prova a
-      // verificare se esiste già un messaggio con content == originalMessage inviato
-      // dallo stesso username nella finestra temporale.
-      if (typeof content === 'string') {
-        const echoMatch = content.match(/^\[([^\]]+)\]\s*(.*)$/);
-        if (echoMatch) {
-          const originalUser = echoMatch[1];
-          const originalText = echoMatch[2];
-          const original = await prisma.user.findUnique({ where: { username: originalUser } });
-          if (original) {
-            const dup = await prisma.message.findFirst({
-              where: {
-                channelId,
-                userId: original.id,
-                content: originalText,
-                timestamp: { gte: fiveSecAgo }
-              }
-            });
-            if (dup) {
-              // Skippa la creazione: è molto probabile un echo del bot
-              return NextResponse.json({ success: true, skipped: true })
-            }
-          }
-        }
-
-        // Controllo duplicato generico (stesso contenuto nello stesso canale in 5s)
-        const dupExact = await prisma.message.findFirst({
-          where: {
-            channelId,
-            content,
-            timestamp: { gte: fiveSecAgo }
-          }
-        });
-        if (dupExact) {
-          return NextResponse.json({ success: true, skipped: true })
-        }
-      }
-
-      // 4. Salva messaggio cifrato nel database
-      console.log('[API][DEBUG] Salvo messaggio: content=', data.content, 'user=', user?.username, 'encrypted:', true)
-      const message = await (prisma as any).message.create({
-        data: {
-          content: data.content, // deve essere base64 cifrato
-          encrypted: true,
-          iv: typeof data.iv === 'string' ? data.iv : null,
-          keyId: typeof data.keyId === 'string' ? data.keyId : null,
-          userId: user.id,
-          channelId: channel.id,
-          type: 'MESSAGE',
-        },
-        include: {
-          user: { select: { id: true, username: true, avatar: true, roles: true } },
-          channel: { select: { id: true, name: true } },
-        },
-      });
-
-      return NextResponse.json({
-        success: true,
-        message: {
-          id: message.id,
-          content: message.content,
-          userId: message.userId,
-          channelId: message.channelId,
-          timestamp: message.timestamp,
-          user: message.user,
-          channel: message.channel,
-          type: message.type,
-        }
-      })
-    }
+    // Webapp -> bot flow handled below (forward to bot bridge). We don't save plaintext/encrypted message here
 
     // Handle webapp-originated messages (webapp -> bot)
     if (action === 'send-message') {
@@ -140,24 +19,112 @@ export async function POST(req: NextRequest) {
       // (il messaggio verrà salvato solo quando il bot lo notificherà come irc-message)
       // 1. Inoltra al bot HTTP bridge
       try {
-        const res = await fetch('http://localhost:4000/send-irc', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({
-            channel: channelId.startsWith('#') ? channelId : `#${channelId}`,
-            message: content,
-            from: data.username,
-            encrypted: !!encrypted,
-            iv: typeof data.iv === 'string' ? data.iv : undefined,
-            keyId: typeof data.keyId === 'string' ? data.keyId : undefined
-          }),
-        });
-        if (!res.ok) {
-          const errText = await res.text();
-          console.error('❌ Bridge webapp→IRC HTTP error:', errText);
-          return NextResponse.json({ error: 'Bridge error', details: errText }, { status: 500 });
-        } else {
-          console.log('[BRIDGE] Messaggio inoltrato al bot bridge HTTP');
+        // Inoltra al bot HTTP bridge con timeout. Se il bridge non risponde, fall back a salvarlo localmente
+        const bridgeUrl = 'http://localhost:4000/send-irc'
+        const controller = new AbortController()
+        const timeoutMs = 5000
+        const timeout = setTimeout(() => controller.abort(), timeoutMs)
+        try {
+          // Prefer channel name for the bridge; accept channelName from client if present
+          const channelForBridge = (data.channelName && typeof data.channelName === 'string')
+            ? (data.channelName.startsWith('#') ? data.channelName : `#${data.channelName}`)
+            : (channelId && typeof channelId === 'string' && channelId.startsWith('#') ? channelId : `#${channelId}`)
+
+          const res = await fetch(bridgeUrl, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              channel: channelForBridge,
+              message: content,
+              from: data.username,
+              encrypted: !!encrypted,
+              iv: typeof data.iv === 'string' ? data.iv : undefined,
+              keyId: typeof data.keyId === 'string' ? data.keyId : undefined
+            }),
+            signal: controller.signal
+          });
+          clearTimeout(timeout)
+          if (!res.ok) {
+            const errText = await res.text();
+            console.error('❌ Bridge webapp→IRC HTTP error:', errText);
+            // fallback to local save
+            throw new Error('Bridge returned error')
+          }
+          // If bridge responded with JSON and a message, propagate it back to the client
+          try {
+            const json = await res.json()
+            if (json && json.message) {
+              return NextResponse.json({ success: true, message: json.message })
+            }
+          } catch (_) {
+            // no json — continue to return optimistic success
+            console.log('[BRIDGE] Messaggio inoltrato al bot bridge HTTP (no body)')
+            return NextResponse.json({ success: true })
+          }
+        } catch (err) {
+          clearTimeout(timeout)
+          console.warn('[BRIDGE] Bridge unreachable or timed out, falling back to local save:', String(err))
+          // Fallback: save locally (server-side) so the mock socket receive a message
+          try {
+            const { SecureIRCProtocol } = require('@/lib/secure-irc.server')
+            const sanitized = SecureIRCProtocol.sanitizeContent(content)
+            const encryptedObj = SecureIRCProtocol.encryptMessage(sanitized)
+            const saved = await prisma.message.create({
+              data: {
+                content: encryptedObj.encryptedContent,
+                iv: encryptedObj.iv,
+                keyId: encryptedObj.tag,
+                encrypted: true,
+                userId: data.userId || 'anonymous',
+                channelId,
+                type: 'MESSAGE'
+              },
+              include: {
+                user: { select: { id: true, username: true, avatar: true } }
+              }
+            })
+            let plaintext = sanitized
+            try {
+              plaintext = SecureIRCProtocol.decryptMessage(saved.content, saved.iv || '', saved.keyId || '')
+            } catch (e) {
+              console.error('Error decrypting after local save fallback:', e)
+            }
+            const emitted = { ...saved, content: plaintext, encrypted: false }
+
+            // Start a background retry to notify the bot bridge in case it was temporarily unreachable
+            ;(async function backgroundNotifyBridge(retry = 0) {
+              try {
+                const bridgeUrl = 'http://localhost:4000/send-irc'
+                const body = JSON.stringify({
+                  channel: channelId.startsWith('#') ? channelId : `#${channelId}`,
+                  message: content,
+                  from: data.username,
+                  encrypted: true,
+                  iv: encryptedObj.iv,
+                  tag: encryptedObj.tag
+                })
+                const notifyController = new AbortController()
+                const notifyTimeout = setTimeout(() => notifyController.abort(), 5000)
+                const resNotify = await fetch(bridgeUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, signal: notifyController.signal })
+                clearTimeout(notifyTimeout)
+                if (!resNotify.ok) throw new Error('Bridge notify failed')
+                console.log('[BRIDGE RETRY] Successfully notified bridge after fallback save')
+              } catch (err) {
+                if (retry < 3) {
+                  const backoff = Math.pow(2, retry) * 1000
+                  console.warn(`[BRIDGE RETRY] attempt ${retry+1} failed, retrying in ${backoff}ms`) 
+                  setTimeout(() => backgroundNotifyBridge(retry + 1), backoff)
+                } else {
+                  console.error('[BRIDGE RETRY] All retries failed, giving up:', String(err))
+                }
+              }
+            })()
+
+            return NextResponse.json({ success: true, message: emitted })
+          } catch (saveErr) {
+            console.error('Fallback save failed:', saveErr)
+            return NextResponse.json({ error: 'Bridge error and fallback save failed', details: String(saveErr) }, { status: 500 })
+          }
         }
       } catch (err) {
         console.error('❌ Bridge webapp→IRC HTTP error:', err);
@@ -178,18 +145,110 @@ export async function POST(req: NextRequest) {
         orderBy: { timestamp: 'asc' },
         take: 100,
       })
+      // Decifra lato server se necessario
+      const { SecureIRCProtocol } = require('@/lib/secure-irc.server');
       return NextResponse.json({
-        messages: messages.map(msg => ({
-          id: msg.id,
-          content: msg.content,
-          userId: msg.userId,
-          channelId: msg.channelId,
-          timestamp: msg.timestamp,
-          user: msg.user,
-          channel: msg.channel,
-          type: msg.type,
-        })),
+        messages: messages.map(msg => {
+          let content = msg.content;
+          if (msg.encrypted) {
+            try {
+              // Supporta sia formato legacy (content:iv:tag) sia nuovo (campi separati)
+              if (msg.iv && msg.keyId) {
+                content = SecureIRCProtocol.decryptMessage(msg.content, msg.iv, msg.keyId);
+              } else {
+                const parts = msg.content.split(':');
+                if (parts.length === 3) {
+                  content = SecureIRCProtocol.decryptMessage(parts[0], parts[1], parts[2]);
+                }
+              }
+            } catch (e) {
+              content = '[Errore decifratura]';
+            }
+          }
+          return {
+            id: msg.id,
+            content,
+            userId: msg.userId,
+            channelId: msg.channelId,
+            timestamp: msg.timestamp,
+            user: msg.user,
+            channel: msg.channel,
+            type: msg.type,
+          };
+        }),
       })
+    }
+
+    // Handle messages forwarded from the IRC bot (bot -> webapp)
+    if (action === 'irc-message') {
+      // Expected fields from bot: channelId, content (encrypted hex), iv (hex), keyId/tag (hex), from, realFrom, encrypted
+      try {
+        const { SecureIRCProtocol } = require('@/lib/secure-irc.server')
+        const channel = data.channelId || data.channel || ''
+        const enc = !!data.encrypted
+        let plaintext = data.content
+        if (enc && data.iv && data.keyId) {
+          try {
+            plaintext = SecureIRCProtocol.decryptMessage(data.content, data.iv, data.keyId)
+          } catch (e) {
+            console.error('Errore decifratura irc-message:', e)
+            return NextResponse.json({ error: 'Decrypt failed' }, { status: 500 })
+          }
+        }
+
+        // Try to find a matching user by realFrom (username)
+        let userId = undefined
+        if (data.realFrom) {
+          const user = await prisma.user.findUnique({ where: { username: data.realFrom } })
+          if (user) userId = user.id
+        }
+        // If no user found, try to find a generic 'webapp' user, otherwise create a placeholder user for the nick
+        if (!userId) {
+          const webappUser = await prisma.user.findUnique({ where: { username: 'webapp' } })
+          if (webappUser) {
+            userId = webappUser.id
+          } else if (data.realFrom) {
+            // Create a lightweight user record for this nick so messages have an author
+            const created = await prisma.user.create({ data: { username: data.realFrom, name: data.realFrom } })
+            userId = created.id
+          } else {
+            userId = data.userId || 'anonymous'
+          }
+        }
+
+        // Save encrypted content to DB (store as encrypted for at-rest)
+        const saved = await prisma.message.create({
+          data: {
+            content: data.content,
+            iv: data.iv || null,
+            keyId: data.keyId || null,
+            encrypted: enc,
+            userId,
+            channelId: channel,
+            type: 'MESSAGE'
+          },
+          include: {
+            user: { select: { id: true, username: true, avatar: true } },
+            channel: { select: { id: true, name: true } }
+          }
+        })
+
+        // Return the plaintext message so downstream (mock socket) can display immediately
+        const emitted = {
+          id: saved.id,
+          content: plaintext,
+          userId: saved.userId,
+          channelId: saved.channelId,
+          timestamp: saved.timestamp,
+          user: saved.user,
+          channel: saved.channel,
+          type: saved.type
+        }
+        return NextResponse.json({ success: true, message: emitted })
+      } catch (err) {
+        console.error('Errore handling irc-message:', err)
+        return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
+      }
     }
 
     return NextResponse.json({ error: 'Unknown action' }, { status: 400 })

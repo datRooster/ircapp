@@ -3,8 +3,8 @@
 import { useState, useEffect, useRef } from 'react'
 import { useSocket } from '../hooks/useSocket'
 import { Message, Channel, User } from '../types'
+import type { MessageWithPending } from '../types'
 import AnnouncementMessage from './AnnouncementMessage'
-import useEncryption from '@/hooks/useEncryption'
 
 interface ChatWindowProps {
   channel: Channel
@@ -13,12 +13,10 @@ interface ChatWindowProps {
 }
 
 export default function ChatWindow({ channel, currentUser, isGuest }: ChatWindowProps) {
-  const [messages, setMessages] = useState<Message[]>([])
+  const [messages, setMessages] = useState<MessageWithPending[]>([])
   const [isLoaded, setIsLoaded] = useState(false)
   const [newMessage, setNewMessage] = useState('')
-  // La cifratura è sempre attiva
-  const encryptMessages = true
-  const { available: cryptoAvailable, encrypt, decrypt } = useEncryption()
+  // La cifratura è gestita solo lato backend
   const [selectedMessages, setSelectedMessages] = useState<Set<string>>(new Set())
   const [selectAll, setSelectAll] = useState(false)
   const messagesEndRef = useRef<HTMLDivElement>(null)
@@ -76,9 +74,7 @@ export default function ChatWindow({ channel, currentUser, isGuest }: ChatWindow
   useEffect(() => {
     const loadChannelMessages = async () => {
       console.log(`🔄 Loading messages for channel: ${channel.id}`)
-
       try {
-        // Per il canale lobby, carica messaggi pre-definiti
         if (channel.id === 'lobby') {
           const { createLobbyMessages } = await import('../lib/lobby-messages')
           const lobbyMessages = createLobbyMessages(channel)
@@ -86,33 +82,15 @@ export default function ChatWindow({ channel, currentUser, isGuest }: ChatWindow
           console.log(`✅ Loaded ${lobbyMessages.length} lobby messages`)
           return
         }
-
-        // Per altri canali, carica dal server
+        // Solo al primo caricamento del canale, NON dopo invio messaggio
         const response = await fetch('/api/socketio', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ action: 'get-messages', channelId: channel.id })
         })
-
         const result = await response.json()
         const existingMessages = result.messages || []
-
-        // If some messages are encrypted, try to decrypt them before rendering using hook
-        const processedMessages: Message[] = []
-        for (const msg of existingMessages) {
-          if (msg.encrypted) {
-            try {
-              const plaintext = await decrypt(msg.content, msg.iv, channel.id)
-              msg.content = plaintext
-              msg.encrypted = false
-            } catch (err) {
-              console.error('Decrypt failed for message', msg.id, err)
-            }
-          }
-          processedMessages.push(msg)
-        }
-
-        // Messaggio di benvenuto per il canale
+        const processedMessages: Message[] = [...existingMessages]
         const welcomeMessage: Message = {
           id: `welcome-${channel.id}`,
           content: `Benvenuto nel canale #${channel.name}! ${existingMessages.length > 0 ? `Ci sono ${existingMessages.length} messaggi precedenti.` : 'Inizia la conversazione!'}`,
@@ -129,14 +107,10 @@ export default function ChatWindow({ channel, currentUser, isGuest }: ChatWindow
           timestamp: new Date(),
           type: 'notice'
         }
-
-        // Combina messaggio di benvenuto + messaggi esistenti
         setMessages([welcomeMessage, ...processedMessages])
         console.log(`✅ Loaded ${existingMessages.length} messages for #${channel.name}`)
-
       } catch (error) {
         console.error('❌ Error loading messages:', error)
-        // Fallback al messaggio di benvenuto
         const welcomeMessage: Message = {
           id: `welcome-${channel.id}`,
           content: `Benvenuto nel canale #${channel.name}! Prova a inviare un messaggio.`,
@@ -156,10 +130,11 @@ export default function ChatWindow({ channel, currentUser, isGuest }: ChatWindow
         setMessages([welcomeMessage])
       }
     }
-
+    // Carica solo al mount/cambio canale, MAI dopo invio messaggio
     loadChannelMessages()
     setIsLoaded(true)
-  }, [channel.id, channel.name]) // Ricarica quando cambia canale
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [channel.id, channel.name]) // Ricarica solo quando cambia canale
 
   useEffect(() => {
     if (!socket || !socket.connected) {
@@ -177,30 +152,44 @@ export default function ChatWindow({ channel, currentUser, isGuest }: ChatWindow
 
       // Controlla che il messaggio sia per il canale corrente
       if (message.channelId === channel.id) {
-        console.log('✅ Message is for current channel, adding to chat')
-        // If encrypted, try to decrypt before adding
-        if ((message as any).encrypted) {
-          try {
-            const plaintext = await decrypt((message as any).content, (message as any).iv, channel.id)
-            message.content = plaintext
-              ; (message as any).encrypted = false
-          } catch (err) {
-            console.error('Decrypt failed for incoming message', err)
-          }
+        // Non mostrare mai messaggi cifrati in chat
+        if (message.encrypted) {
+          console.log('⏩ Messaggio cifrato ignorato in chat window')
+          return
         }
-
         setMessages(prev => {
-          // Evita duplicati: se esiste già un messaggio con stesso id o stesso contenuto inviato localmente, non aggiungerlo
-          const exists = prev.find(m => m.id === message.id || (m.localEcho && m.content === message.content && m.userId === message.userId))
-          if (exists) {
-            console.log('⚠️ Message already exists or is local echo, skipping')
-            // Se il messaggio locale era un echo, sostituiscilo con quello \"ufficiale\" dal server
-            if (exists.localEcho && message.id && !message.localEcho) {
-              return prev.map(m => m === exists ? { ...message, encrypted: false, localEcho: false } : m)
-            }
-            return prev
+          // Sostituisci l'echo ottimistico se matcha per content, userId e pending
+          const idx = prev.findIndex(m => (m as any).pending && m.content === message.content && m.userId === message.userId)
+          if (idx !== -1) {
+            const newArr = [...prev]
+            newArr[idx] = { ...message }
+            // Deduplica per id (mantieni la prima occorrenza)
+            const seen = new Set<string>()
+            return newArr.filter(m => {
+              if (seen.has(m.id)) return false
+              seen.add(m.id)
+              return true
+            })
           }
-          return [...prev, { ...message, encrypted: false, localEcho: false }]
+
+          // Rimuovi eventuali pending duplicati e aggiungi il messaggio reale
+          const filtered = prev.filter(m => !((m as any).pending && m.content === message.content && m.userId === message.userId));
+          // Se già presente (stesso id), non aggiungere ma deduplica
+          if (filtered.find(m => m.id === message.id)) {
+            const seen = new Set<string>()
+            return filtered.filter(m => {
+              if (seen.has(m.id)) return false
+              seen.add(m.id)
+              return true
+            })
+          }
+          const combined = [...filtered, { ...message }]
+          const seen = new Set<string>()
+          return combined.filter(m => {
+            if (seen.has(m.id)) return false
+            seen.add(m.id)
+            return true
+          })
         })
       } else {
         console.log('ℹ️ Message is for different channel, ignoring')
@@ -242,26 +231,34 @@ export default function ChatWindow({ channel, currentUser, isGuest }: ChatWindow
         return
       }
     }
-    ; (async () => {
+    (async () => {
       try {
-        // Cifratura sempre attiva
-        const { content, iv } = await encrypt(newMessage, channel.id)
-        console.log('Sending encrypted message')
-        // Non aggiungere localEcho: il messaggio verrà mostrato solo quando arriva l'echo dal server/bot
-        // Invia sempre il nome canale IRC (es. #devtest) come channelId
         const channelName = channel.name.startsWith('#') ? channel.name : `#${channel.name}`
-        socket.emit('send-message', {
-          content,
+        // Echo ottimistico
+        const optimisticId = `pending-${Date.now()}`
+        const optimisticMsg: MessageWithPending = {
+          id: optimisticId,
+          content: newMessage,
           userId: currentUser.id,
-          channelId: channelName,
-          username: currentUser.username,
-          encrypted: true,
-          iv
+          channelId: channel.id,
+          timestamp: new Date(),
+          user: currentUser,
+          channel: channel,
+          type: 'message', // Assicurati che sia minuscolo se richiesto dall'enum
+          pending: true
+        };
+        setMessages(prev => [...prev, optimisticMsg])
+        socket.emit('send-message', {
+          content: newMessage,
+          userId: currentUser.id,
+          channelId: channel.id,
+          channelName,
+          username: currentUser.username
         })
         setNewMessage('')
       } catch (err) {
-        console.error('❌ Encryption/send error', err)
-        alert('Errore durante l\'invio cifrato del messaggio')
+        console.error('❌ Invio messaggio errore', err)
+        alert('Errore durante l\'invio del messaggio')
       }
     })()
   }

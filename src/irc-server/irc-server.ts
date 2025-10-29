@@ -285,12 +285,45 @@ export class IRCServer extends EventEmitter {
         return
       }
 
-      // Salva messaggio nel database
+      // Salva messaggio nel database (cifrato a riposo)
       try {
+        // Use server-side secure protocol to sanitize and encrypt content
+        const { SecureIRCProtocol } = require('@/lib/secure-irc.server')
+
+        // Estrai autore e testo puro se il messaggio arriva dal bot (formato: [username] messaggio)
+        let actualContent = message
+        let authorUsername: string | undefined = undefined
+        // Migliora la regex: accetta spazi, caratteri speciali, unicode
+        const match = message.match(/^\s*\[([^\]]+)\]\s*([\s\S]*)$/u)
+        if (match && match[2].trim().length > 0) {
+          authorUsername = match[1].trim()
+          actualContent = match[2].trim()
+        }
+
+        // Solo il testo puro viene cifrato e salvato
+        const sanitized = SecureIRCProtocol.sanitizeContent(actualContent)
+
+        // Determine userId: prefer extracted author, else the sending client if available
+        let saveUserId = client.userId || undefined
+        if (authorUsername) {
+          try {
+            const user = await this.prisma.user.findUnique({ where: { username: authorUsername } })
+            if (user) saveUserId = user.id
+          } catch (e) {
+            // ignore DB lookup errors and fall back to client.userId
+            console.error('Error finding user for forwarded author:', e)
+          }
+        }
+
+        const encrypted = SecureIRCProtocol.encryptMessage(sanitized)
+
         await this.prisma.message.create({
           data: {
-            content: message,
-            userId: client.userId || 'anonymous',
+            content: encrypted.encryptedContent,
+            iv: encrypted.iv,
+            keyId: encrypted.tag,
+            encrypted: true,
+            userId: saveUserId || (client.userId || 'anonymous'),
             channelId: channel.id,
             type: 'MESSAGE'
           }

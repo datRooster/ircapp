@@ -3,6 +3,8 @@
 
 const irc = require('irc-framework');
 const express = require('express');
+// Use the server-side secure protocol implementation (Node)
+const { SecureIRCProtocol } = require('./src/lib/secure-irc.server');
 const bodyParser = require('body-parser');
 const crypto = require('crypto');
 
@@ -135,57 +137,61 @@ const pendingMessages = new Map(); // channel -> array di { ircMsg, res }
 const recentForwards = new Map(); // key -> { originalMessageId, expires }
 
 app.post('/send-irc', async (req, res) => {
-  const { channel, message, from, originalMessageId, encrypted, iv } = req.body;
+  const { channel, message, from, iv, tag, encrypted } = req.body;
   if (!channel || !message || !from) {
-    return res.status(400).json({ error: 'channel, message, from sono obbligatori' });
+    return res.status(400).json({ error: 'channel, message e from sono obbligatori' });
   }
-  console.log(`[BOT] Ricevuto messaggio da webapp per ${channel} da ${from} (encrypted: ${!!encrypted}) message preview: ${message.slice(0,120)}`);
-  // Decifra se già cifrato, altrimenti cifra ora
-  let plaintext = message;
-  let wasEncrypted = false;
+  // Support two modes: encrypted payload (with iv+tag) or plaintext
+  let plaintext;
   try {
-    if (encrypted && iv) {
-      if (!process.env.WEBAPP_ENC_KEY) {
-        console.warn('[BOT] Incoming message marked encrypted but no WEBAPP_ENC_KEY is set in bot process')
-        return res.status(500).json({ error: 'Server misconfigured: missing encryption key' })
-      }
-      const key = Buffer.from(process.env.WEBAPP_ENC_KEY, 'base64')
-      const ivBuf = Buffer.from(iv, 'base64')
-      const combined = Buffer.from(message, 'base64')
-      const tag = combined.slice(combined.length - 16)
-      const ciphertext = combined.slice(0, combined.length - 16)
-      const decipher = crypto.createDecipheriv('aes-256-gcm', key, ivBuf)
-      decipher.setAuthTag(tag)
-      plaintext = Buffer.concat([decipher.update(ciphertext), decipher.final()]).toString('utf8')
-      wasEncrypted = true;
-      console.log(`[BOT] Decrypted incoming webapp message from ${from} (preview): ${plaintext.slice(0,120)}`)
+    if (encrypted || (iv && tag)) {
+      // Expect message to be ciphertext and iv/tag to be provided
+      plaintext = SecureIRCProtocol.decryptMessage(message, iv, tag);
+      console.log(`[BOT] Decrypted incoming webapp message from ${from} (preview): ${plaintext.slice(0,120)}`);
+    } else {
+      // Plaintext path: accept raw message from webapp
+      plaintext = String(message);
+      console.log(`[BOT] Received plaintext incoming webapp message from ${from} (preview): ${plaintext.slice(0,120)}`);
     }
   } catch (err) {
-    console.error('[BOT] Decrypt failed for incoming webapp message:', err)
-    return res.status(500).json({ error: 'Decrypt failed' })
+    console.error('[BOT] Decrypt failed for incoming webapp message:', err);
+    return res.status(500).json({ error: 'Decrypt failed' });
   }
-
   // Prepara messaggio per IRC (aggiungi [username] ... SOLO per IRC)
   const ircMsg = `[${from}] ${plaintext}`;
   // record this forwarded message (full ircMsg) so that when IRC echoes it back possiamo evitare echo
   try {
     const hash = hashForMatch(ircMsg)
     const key = `${channel}|${hash}`
-    recentForwards.set(key, { originalMessageId: originalMessageId || null, expires: Date.now() + 10000 })
+    recentForwards.set(key, { originalMessageId: null, expires: Date.now() + 10000 })
   } catch (e) {
     // ignore
   }
   const chanObj = client.channel(channel);
   if (chanObj && chanObj.joined) {
-    client.say(channel, ircMsg);
-    console.log(`[BOT] Inviato su ${channel}:`, ircMsg);
-    // NON notificare la webapp/API: il messaggio è già stato gestito dalla pipeline webapp→API→DB
-    return res.json({ ok: true });
+    try {
+      console.log(`[BOT] Sending to channel (joined): ${channel} -> ${ircMsg}`)
+      client.say(channel, ircMsg);
+      console.log(`[BOT] Inviato su ${channel}:`, ircMsg);
+      return res.json({ ok: true });
+    } catch (err) {
+      console.warn('[BOT] client.say failed, falling back to raw PRIVMSG:', err)
+      try {
+        client.raw(`PRIVMSG ${channel} :${ircMsg}`)
+        console.log('[BOT] Sent via raw PRIVMSG')
+        return res.json({ ok: true })
+      } catch (err2) {
+        console.error('[BOT] raw PRIVMSG failed:', err2)
+        return res.status(500).json({ error: 'Send failed' })
+      }
+    }
   } else {
     if (!pendingMessages.has(channel)) {
       pendingMessages.set(channel, []);
       client.join(channel);
     }
+    // Push the response so we can reply after join completes
+    console.log(`[BOT] Channel ${channel} not joined yet — queueing message and joining`) 
     pendingMessages.get(channel).push({ ircMsg, res });
     // La risposta HTTP verrà gestita nell'evento 'join'
   }
@@ -197,9 +203,21 @@ client.on('join', (event) => {
   if (nick === IRC_NICK && pendingMessages.has(channel)) {
     const queue = pendingMessages.get(channel);
     for (const { ircMsg, res } of queue) {
-      client.say(channel, ircMsg);
-      console.log(`[BOT] Inviato su ${channel}:`, ircMsg);
-      if (res && !res.headersSent) res.json({ ok: true });
+      try {
+        console.log(`[BOT] Sending queued message to ${channel}: ${ircMsg}`)
+        client.say(channel, ircMsg);
+        console.log(`[BOT] Inviato su ${channel}:`, ircMsg);
+        if (res && !res.headersSent) res.json({ ok: true });
+      } catch (err) {
+        console.warn('[BOT] queued client.say failed, falling back to raw PRIVMSG', err)
+        try {
+          client.raw(`PRIVMSG ${channel} :${ircMsg}`)
+          if (res && !res.headersSent) res.json({ ok: true });
+        } catch (err2) {
+          console.error('[BOT] queued raw PRIVMSG failed:', err2)
+          if (res && !res.headersSent) res.status(500).json({ error: 'Send failed' });
+        }
+      }
     }
     pendingMessages.delete(channel);
   }

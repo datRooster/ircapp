@@ -29,7 +29,7 @@ export interface Message {
   channelId: string;
   channel: Channel;
   timestamp: Date;
-  type: "notice" | "message" | "join" | "part" | "quit" | "action" | "announcement";
+  type: "notice" | "message" | "join" | "part" | "quit" | "action" | "announcement" | "pending";
   encrypted?: boolean;
   // aggiungi questa riga:
   localEcho?: boolean;
@@ -63,3 +63,5 @@ export interface SocketEvents {
   connect: () => void;
   disconnect: () => void;
 }
+
+export type MessageWithPending = Message & { pending?: boolean }

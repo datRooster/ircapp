@@ -156,21 +156,42 @@ export class IRCClient extends EventEmitter {
 
   public broadcastToChannel(channelName: string, message: string, excludeSelf: boolean = true) {
     if (!this.server) return
-    
-    const channelManager = this.server.getChannelManager()
-    const userManager = this.server.getUserManager()
-    
-    // Get all clients in this channel
-    channelManager.getChannelMembers(channelName).then((members: any[]) => {
-      for (const member of members) {
-        const client = userManager.getClientByNickname(member.nickname)
-        if (client && (!excludeSelf || client.id !== this.id)) {
-          client.send(message)
+
+    const server = this.server
+    try {
+      // Prefer in-memory connected clients to broadcast in realtime
+      const connected = server.getConnectedClients()
+      for (const c of connected) {
+        try {
+          if (c.isInChannel(channelName)) {
+            const willSend = !excludeSelf || c.id !== this.id
+            console.log(`[IRC BROADCAST] target=${c.nickname || c.id} willSend=${willSend}`)
+            if (willSend) c.send(message)
+          }
+        } catch (err) {
+          console.error('Error sending to connected client', err)
         }
       }
-    }).catch((error: any) => {
-      console.error('Error broadcasting to channel:', error)
-    })
+    } catch (error) {
+      console.error('Error broadcasting to channel (fallback):', error)
+      // Fallback to DB-backed broadcast if in-memory method fails
+      const channelManager = server.getChannelManager()
+      const userManager = server.getUserManager()
+      channelManager.getChannelMembers(channelName).then((members: any[]) => {
+        for (const member of members) {
+          try {
+            const client = userManager.getClientByNickname(member.nickname)
+            if (client && (!excludeSelf || client.id !== this.id)) {
+              client.send(message)
+            }
+          } catch (err) {
+            console.error('Error broadcasting to member', member, err)
+          }
+        }
+      }).catch((err: any) => {
+        console.error('Error broadcasting to channel (db fallback):', err)
+      })
+    }
   }
 
   public disconnect() {

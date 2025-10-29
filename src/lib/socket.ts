@@ -3,6 +3,9 @@ import { NextApiRequest, NextApiResponse } from 'next'
 import { Server as ServerIO } from 'socket.io'
 import { prisma } from './prisma'
 
+// Server-side secure protocol for encryption/decryption
+const { SecureIRCProtocol } = require('@/lib/secure-irc.server')
+
 export type NextApiResponseServerIO = NextApiResponse & {
   socket: {
     server: NetServer & {
@@ -81,16 +84,23 @@ export function initSocket(server: NetServer): ServerIO {
       }
     })
 
-    // Send message
+    // Send message (ensure encrypted at rest)
     socket.on('send-message', async (data: {
       content: string
       userId: string
       channelId: string
     }) => {
       try {
+        // Sanitize and encrypt content before saving to DB
+        const sanitized = SecureIRCProtocol.sanitizeContent(data.content)
+        const encrypted = SecureIRCProtocol.encryptMessage(sanitized)
+
         const message = await prisma.message.create({
           data: {
-            content: data.content,
+            content: encrypted.encryptedContent,
+            iv: encrypted.iv,
+            keyId: encrypted.tag,
+            encrypted: true,
             userId: data.userId,
             channelId: data.channelId,
             type: 'MESSAGE'
@@ -106,8 +116,22 @@ export function initSocket(server: NetServer): ServerIO {
           }
         })
 
-        // Broadcast message to all users in the channel
-        io.to(data.channelId).emit('new-message', message)
+        // Decrypt for live broadcast to connected clients (clients must never receive ciphertext)
+        let plaintext = sanitized
+        try {
+          plaintext = SecureIRCProtocol.decryptMessage(message.content, message.iv || '', message.keyId || '')
+        } catch (e) {
+          console.error('Error decrypting immediately after save:', e)
+        }
+
+        const emitted = {
+          ...message,
+          content: plaintext,
+          encrypted: false
+        }
+
+        // Broadcast plaintext message to all users in the channel
+        io.to(data.channelId).emit('new-message', emitted)
 
         console.log(`Message sent in channel ${data.channelId}`)
       } catch (error) {
