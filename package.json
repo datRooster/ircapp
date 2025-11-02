@@ -6,7 +6,7 @@
     "dev": "next dev -H 0.0.0.0",
     "dev:local": "next dev",
     "build": "next build",
-    "start": "next start -H 0.0.0.0",
+    "start": "next start -H 0.0.0.0 -p ${PORT:-3000}",
     "start:local": "next start",
     "lint": "eslint",
     "postinstall": "prisma generate",
@@ -15,8 +15,9 @@
     "irc:start": "tsx src/irc-server/start-server.ts",
     "irc:dev": "tsx watch src/irc-server/start-server.ts",
     "dev:full": "concurrently \"npm run dev\" \"npm run irc:dev\"",
-    "bot:start": "dotenv -e .env -- node src/bridge/webapp-bot.js",
+    "bot:start": "node src/bridge/webapp-bot.js",
     "dev:all": "concurrently \"npm run dev\" \"npm run irc:dev\" \"npm run bot:start\"",
+    "railway:all": "concurrently \"npm run start\" \"npm run irc:start\" \"npm run bot:start\"",
     "create-bot": "tsx scripts/create-bot-user.ts"
   },
   "dependencies": {

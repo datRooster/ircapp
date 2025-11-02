@@ -1,8 +1,12 @@
-{
-  "build": {
-    "command": "npm run build"
-  },
-  "deploy": {
-    "command": "npm start"
-  }
-}
+[build]
+builder = "NIXPACKS"
+buildCommand = "npm install && npx prisma generate && npm run build"
+
+[deploy]
+startCommand = "npm run start"
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10
+
+[env]
+NODE_VERSION = "20"
+NPM_CONFIG_PRODUCTION = "false"
