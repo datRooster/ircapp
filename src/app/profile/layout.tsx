@@ -1,6 +1,9 @@
 import { ReactNode } from 'react'
 import { prisma } from '@/lib/prisma'
 
+// Force dynamic rendering - no static generation
+export const dynamic = 'force-dynamic';
+
 // Sidebar statica: solo lista canali, nessun handler
 export default async function ProfileLayout({ children }: { children: ReactNode }) {
   const channels = await prisma.channel.findMany({

@@ -5,6 +5,9 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { FaGithub, FaMapMarkerAlt, FaUsers, FaBookOpen, FaUserCircle, FaUserShield, FaUserSlash, FaUserCheck, FaUserClock, FaHashtag, FaComments, FaCalendarAlt } from 'react-icons/fa'
 
+// Force dynamic rendering - no static generation
+export const dynamic = 'force-dynamic';
+
 export default async function ProfilePage() {
   const session = await auth()
   if (!session?.user) {

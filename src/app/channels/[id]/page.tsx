@@ -4,6 +4,9 @@ import ChatWindow from '@/components/ChatWindow';
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma';
 
+// Force dynamic rendering - no static generation
+export const dynamic = 'force-dynamic';
+
 interface ChannelPageProps {
   params: { id: string }
 }

@@ -1,6 +1,9 @@
 import { prisma } from '@/lib/prisma';
 import Link from 'next/link';
 
+// Force dynamic rendering - no static generation
+export const dynamic = 'force-dynamic';
+
 export default async function ChannelsListPage() {
   const channels = await prisma.channel.findMany({ orderBy: { name: 'asc' } });
   return (
