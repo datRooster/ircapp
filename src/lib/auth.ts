@@ -5,6 +5,7 @@ import { prisma } from './prisma'
 import bcrypt from 'bcryptjs'
 
 export const authOptions: NextAuthConfig = {
+  trustHost: true, // Allow Railway dynamic URLs
   providers: [
     // OAuth Provider - Solo GitHub
     GitHub({
