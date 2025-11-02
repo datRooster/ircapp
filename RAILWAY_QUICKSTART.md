@@ -36,7 +36,7 @@ DATABASE_URL=postgresql://postgres:xhxs...@mainline.proxy.rlwy.net:44341/railway
 
 # Auth (usa i secrets generati)
 NEXTAUTH_SECRET=<dal passo 1>
-NEXTAUTH_URL=${{RAILWAY_PUBLIC_DOMAIN}}
+NEXTAUTH_URL=https://your-railway-domain.up.railway.app
 
 # Admin
 ADMIN_USERNAME=admin
@@ -53,7 +53,7 @@ IRC_RATE_LIMIT_MESSAGES=10
 IRC_RATE_LIMIT_WINDOW=60000
 
 # Bot
-WEBAPP_HOST=${{RAILWAY_PUBLIC_DOMAIN}}
+WEBAPP_HOST=https://your-railway-domain.up.railway.app
 
 # GitHub OAuth (configuralo dopo)
 GITHUB_CLIENT_ID=<later>
