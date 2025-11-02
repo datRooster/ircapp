@@ -1,0 +1,14 @@
+# Railway IRC Server Configuration
+# Questo file configura il server IRC come servizio separato
+
+[build]
+builder = "NIXPACKS"
+buildCommand = "npm install && npx prisma generate"
+
+[deploy]
+# Avvia solo il server IRC
+startCommand = "npm run irc:start"
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10
+
+# Railway esporrà automaticamente la porta definita in nixpacks.toml

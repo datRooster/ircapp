@@ -1,0 +1,16 @@
+[phases.setup]
+nixPkgs = ["nodejs_20", "openssl"]
+
+[phases.install]
+cmds = ["npm ci"]
+
+[phases.build]
+cmds = ["npx prisma generate"]
+
+[start]
+cmd = "npm run irc:start"
+
+# Esponi porta IRC (6667)
+[[ports]]
+port = 6667
+protocol = "tcp"
