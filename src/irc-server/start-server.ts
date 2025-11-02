@@ -3,8 +3,9 @@
 import { IRCServer } from './irc-server'
 import * as os from 'os'
 
+// IRC usa sempre IRC_PORT, ignora la variabile PORT di Railway
 const PORT = parseInt(process.env.IRC_PORT || '6667')
-const HOSTNAME = process.env.IRC_HOSTNAME || 'localhost'
+const HOSTNAME = process.env.IRC_HOSTNAME || 'irc.ircapp.community'
 
 // Funzione per ottenere IP locale
 function getLocalIPs(): string[] {
