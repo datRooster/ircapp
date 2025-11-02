@@ -51,7 +51,7 @@ export class IRCServer extends EventEmitter {
   }
 
   private async handleMessage(client: IRCClient, message: IRCMessage) {
-    const { command, params, prefix } = message
+    const { command, params } = message
     
     console.log(`📨 IRC Command: ${command} from ${client.nickname || client.id}`, params)
 
@@ -357,7 +357,7 @@ export class IRCServer extends EventEmitter {
     client.send(`:${this.hostname} PONG ${this.hostname} :${server}`)
   }
 
-  private handlePong(client: IRCClient, server: string) {
+  private handlePong(client: IRCClient, _server: string) {
     client.lastPong = Date.now()
   }
 
@@ -378,7 +378,6 @@ export class IRCServer extends EventEmitter {
   private async handleNames(client: IRCClient, channelName: string) {
     const members = await this.channels.getChannelMembers(channelName)
     const names = members.map(member => {
-      const client = this.users.getClientByNickname(member.nickname)
       const prefix = member.role === 'admin' ? '@' : member.role === 'moderator' ? '+' : ''
       return prefix + member.nickname
     })

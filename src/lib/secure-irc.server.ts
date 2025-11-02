@@ -71,7 +71,7 @@ export class SecureIRCProtocol {
     return hash.digest('hex')
   }
 
-  static verifySignature(content: string, userId: string, signature: string): boolean {
+  static verifySignature(_content: string, _userId: string, signature: string): boolean {
     return signature.length > 0
   }
 

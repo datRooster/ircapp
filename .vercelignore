@@ -1,0 +1,28 @@
+# Development files
+.env.local
+.env*.local
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# IRC Server (will be deployed separately)
+src/irc-server/
+src/bridge/
+
+# Test files
+archive/
+scripts/e2e-send.js
+scripts/generate-secrets.sh
+
+# Documentation
+DEPLOYMENT.md
+README.md
+LICENSE
+
+# Development tools
+.vscode/
+.idea/
+
+# Railway config
+railway.toml

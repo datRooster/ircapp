@@ -1,6 +1,6 @@
 import * as net from 'net'
 import { EventEmitter } from 'events'
-import { IRCMessage, IRCMessageParser } from './irc-message'
+import { IRCMessageParser } from './irc-message'
 
 export class IRCClient extends EventEmitter {
   public readonly id: string

@@ -17,7 +17,7 @@ export class ChannelManager {
     this.prisma = prisma
   }
 
-  async joinChannel(client: IRCClient, channelName: string, key?: string): Promise<any> {
+  async joinChannel(client: IRCClient, channelName: string, _key?: string): Promise<any> {
     const normalizedName = channelName.toLowerCase()
     
     try {
@@ -248,7 +248,7 @@ export class ChannelManager {
     }
   }
 
-  async canSetTopic(client: IRCClient, channelName: string): Promise<boolean> {
+  async canSetTopic(client: IRCClient, _channelName: string): Promise<boolean> {
     // Solo moderatori e admin possono impostare topic
     return client.isModerator()
   }
@@ -267,7 +267,7 @@ export class ChannelManager {
     }
   }
 
-  private getUserRoleInChannel(client: IRCClient, channel: any): string {
+  private getUserRoleInChannel(client: IRCClient, _channel: any): string {
     if (client.hasRole('admin')) return 'admin'
     if (client.hasRole('moderator')) return 'moderator'
     return 'member'

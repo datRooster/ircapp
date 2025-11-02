@@ -1,22 +1,20 @@
 'use client'
 
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
 import { Channel } from '../types'
 import { 
-  FaCrown, 
-  FaHashtag, 
-  FaLock, 
-  FaStar, 
-  FaPlus,
-  FaUsers,
-  FaCog
-} from 'react-icons/fa'
+  Hash, 
+  Crown, 
+  Lock, 
+  Plus,
+  X,
+  Shield
+} from 'lucide-react'
 
 interface ChannelSidebarProps {
   channels: Channel[]
   currentChannel: string | null
   onChannelSelect: (channelId: string) => void
-  onCreateChannel: () => void
   userRole?: string
   username?: string
   onOpenAdminPanel?: () => void
@@ -26,7 +24,6 @@ export default function ChannelSidebar({
   channels, 
   currentChannel, 
   onChannelSelect, 
-  onCreateChannel,
   userRole = 'user',
   username = 'Usuario',
   onOpenAdminPanel
@@ -45,116 +42,184 @@ export default function ChannelSidebar({
   }
 
   return (
-    <div className="w-64 bg-gray-800 text-white flex flex-col">
-      {/* Server Header */}
-      <div className="p-4 border-b border-gray-700">
-        <h1 className="text-xl font-bold">IRC Community</h1>
+    <div className="w-72 bg-gray-50 dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 flex flex-col">
+      {/* Server Header - Enterprise */}
+      <div className="px-4 py-5 border-b border-gray-200 dark:border-gray-800">
+        <h1 className="text-lg font-bold text-gray-900 dark:text-white">
+          IRC Community
+        </h1>
+        <p className="text-xs text-gray-500 dark:text-gray-400 mt-1">
+          Enterprise Communication
+        </p>
       </div>
 
-      {/* Channels List */}
+      {/* Channels List - Enterprise Style */}
       <div className="flex-1 overflow-y-auto">
-        <div className="p-4">
-          <div className="flex items-center justify-between mb-4">
-            <h2 className="text-sm font-semibold text-gray-400 uppercase tracking-wider">
-              Canali
+        <div className="px-3 py-4">
+          <div className="flex items-center justify-between mb-3 px-2">
+            <h2 className="text-xs font-semibold text-gray-500 dark:text-gray-400 uppercase tracking-wider">
+              Channels
             </h2>
             <button
               onClick={() => setIsCreateModalOpen(true)}
-              className="text-gray-400 hover:text-white transition-colors"
-              title="Crea nuovo canale"
+              className="p-1.5 rounded-md text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 
+                       hover:bg-gray-200 dark:hover:bg-gray-800 transition-colors"
+              title="Create new channel"
             >
-              <FaPlus className="text-sm" />
+              <Plus className="w-4 h-4" />
             </button>
           </div>
           
-          <div className="space-y-1">
-            {channels.map((channel) => (
-              <button
-                key={channel.id}
-                onClick={() => onChannelSelect(channel.id)}
-                className={`w-full text-left px-2 py-1 rounded hover:bg-gray-700 transition-colors ${
-                  currentChannel === channel.id ? 'bg-blue-600 hover:bg-blue-700' : ''
-                } ${channel.isReadOnly ? 'border-l-2 border-yellow-500' : ''}`}
-              >
-                <div className="flex items-center justify-between">
-                  <div className="flex items-center space-x-2">
-                    <span className="text-gray-400">
-                      {channel.id === 'lobby' ? (
-                        <FaCrown className="text-yellow-400" />
-                      ) : (
-                        <FaHashtag />
-                      )}
-                    </span>
-                    <span>{channel.name}</span>
+          <div className="space-y-0.5">
+            {channels.map((channel) => {
+              const isActive = currentChannel === channel.id
+              const isLobby = channel.id === 'lobby'
+              
+              return (
+                <button
+                  key={channel.id}
+                  onClick={() => onChannelSelect(channel.id)}
+                  className={`w-full group flex items-center gap-3 px-3 py-2.5 rounded-lg 
+                            text-sm font-medium transition-all
+                            ${isActive 
+                              ? 'bg-blue-600 text-white shadow-sm' 
+                              : 'text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-gray-800'
+                            }
+                            ${channel.isReadOnly ? 'border-l-2 border-amber-500' : ''}`}
+                >
+                  {/* Icon */}
+                  <div className={`shrink-0 ${isActive ? 'text-white' : 'text-gray-400 dark:text-gray-500'}`}>
+                    {isLobby ? (
+                      <Crown className="w-4 h-4" />
+                    ) : (
+                      <Hash className="w-4 h-4" />
+                    )}
                   </div>
-                  {channel.isReadOnly && (
-                    <div className="flex items-center space-x-1">
-                      <FaLock className="text-yellow-400 text-xs" title="Solo lettura" />
-                      {channel.id === 'lobby' && (
-                        <FaStar className="text-blue-400 text-xs" title="Canale amministrativo" />
-                      )}
-                    </div>
-                  )}
-                </div>
-              </button>
-            ))}
+                  
+                  {/* Channel Name */}
+                  <span className="flex-1 text-left truncate">
+                    {channel.name}
+                  </span>
+                  
+                  {/* Badges */}
+                  <div className="flex items-center gap-1">
+                    {channel.isReadOnly && (
+                      <Lock className={`w-3.5 h-3.5 ${isActive ? 'text-white' : 'text-amber-500'}`} />
+                    )}
+                  </div>
+                </button>
+              )
+            })}
           </div>
         </div>
         
-        {/* Admin Panel Access */}
+        {/* Admin Panel Access - Enterprise */}
         {(userRole === 'admin' || userRole === 'moderator') && onOpenAdminPanel && (
-          <div className="p-4 border-t border-gray-700">
-            <button
-              onClick={onOpenAdminPanel}
-              className="w-full flex items-center space-x-3 p-2 rounded hover:bg-gray-700 transition-colors text-yellow-400 hover:text-yellow-300"
-            >
-              <FaCog className="text-lg" />
-              <span className="font-medium">Pannello Admin</span>
-            </button>
+          <div className="px-3 pb-4">
+            <div className="pt-4 border-t border-gray-200 dark:border-gray-800">
+              <button
+                onClick={onOpenAdminPanel}
+                className="w-full px-3 py-2 rounded-lg 
+                   bg-linear-to-r from-amber-500 to-orange-500 text-white
+                   hover:from-amber-600 hover:to-orange-600 
+                   transition-all duration-200 flex items-center justify-center gap-2
+                   font-medium shadow-lg hover:shadow-xl"
+              >
+                <Shield className="w-4 h-4" />
+                <span>Pannello Admin</span>
+              </button>
+            </div>
           </div>
         )}
       </div>
 
-      {/* User Info */}
-      <div className="p-4 border-t border-gray-700">
-        <div className="flex items-center space-x-3">
-          <div className="w-8 h-8 bg-green-500 rounded-full flex items-center justify-center">
-            <div className="w-2 h-2 bg-white rounded-full"></div>
+      {/* User Info - Enterprise Profile Card */}
+      <div className="px-4 py-4 border-t border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-950">
+        <div className="flex items-center gap-3">
+          <div className="relative">
+            <div className="w-10 h-10 rounded-lg bg-linear-to-br from-blue-500 to-blue-600 
+                          flex items-center justify-center text-white font-semibold text-sm shadow-sm">
+              {username.charAt(0).toUpperCase()}
+            </div>
+            {/* Online indicator */}
+            <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 bg-green-500 
+                          border-2 border-white dark:border-gray-950 rounded-full"></div>
           </div>
-          <div className="flex-1">
-            <p className="font-semibold">{username}</p>
-            <p className="text-xs text-gray-400 capitalize">{userRole}</p>
+          <div className="flex-1 min-w-0">
+            <p className="font-semibold text-sm text-gray-900 dark:text-white truncate">
+              {username}
+            </p>
+            <div className="flex items-center gap-1.5 mt-0.5">
+              {(userRole === 'admin' || userRole === 'moderator') && (
+                <Shield className="w-3 h-3 text-amber-500" />
+              )}
+              <p className="text-xs text-gray-500 dark:text-gray-400 capitalize">
+                {userRole}
+              </p>
+            </div>
           </div>
         </div>
       </div>
 
-      {/* Create Channel Modal */}
+      {/* Create Channel Modal - Enterprise */}
       {isCreateModalOpen && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-gray-800 rounded-lg p-6 w-96">
-            <h3 className="text-xl font-bold mb-4">Crea nuovo canale</h3>
-            <form onSubmit={handleCreateChannel}>
-              <input
-                type="text"
-                value={newChannelName}
-                onChange={(e) => setNewChannelName(e.target.value)}
-                placeholder="Nome del canale"
-                className="w-full bg-gray-700 text-white rounded px-3 py-2 mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                autoFocus
-              />
-              <div className="flex justify-end space-x-2">
+        <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl w-full max-w-md">
+            {/* Modal Header */}
+            <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-700">
+              <h3 className="text-lg font-semibold text-gray-900 dark:text-white">
+                Create New Channel
+              </h3>
+              <button
+                onClick={() => setIsCreateModalOpen(false)}
+                className="p-1.5 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300
+                         hover:bg-gray-100 dark:hover:bg-gray-700 transition-colors"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+            
+            {/* Modal Body */}
+            <form onSubmit={handleCreateChannel} className="p-6 space-y-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Channel Name
+                </label>
+                <input
+                  type="text"
+                  value={newChannelName}
+                  onChange={(e) => setNewChannelName(e.target.value)}
+                  placeholder="e.g. general-discussion"
+                  className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600
+                           bg-white dark:bg-gray-700 text-gray-900 dark:text-white
+                           placeholder-gray-400 dark:placeholder-gray-500
+                           focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
+                           transition-shadow"
+                  autoFocus
+                />
+                <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
+                  Use lowercase letters, numbers, and hyphens
+                </p>
+              </div>
+              
+              {/* Modal Footer */}
+              <div className="flex items-center justify-end gap-3 pt-4">
                 <button
                   type="button"
                   onClick={() => setIsCreateModalOpen(false)}
-                  className="px-4 py-2 text-gray-400 hover:text-white"
+                  className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300
+                           hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
                 >
-                  Annulla
+                  Cancel
                 </button>
                 <button
                   type="submit"
-                  className="px-4 py-2 bg-blue-600 hover:bg-blue-700 rounded"
+                  disabled={!newChannelName.trim()}
+                  className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700
+                           disabled:bg-gray-300 dark:disabled:bg-gray-700 disabled:cursor-not-allowed
+                           rounded-lg transition-colors shadow-sm"
                 >
-                  Crea
+                  Create Channel
                 </button>
               </div>
             </form>

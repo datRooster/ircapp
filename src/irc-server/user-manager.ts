@@ -64,7 +64,7 @@ export class UserManager {
   }
 
   // Database operations
-  async authenticateUser(nickname: string, password?: string): Promise<any> {
+  async authenticateUser(nickname: string, _password?: string): Promise<any> {
     try {
       const user = await this.prisma.user.findUnique({
         where: { username: nickname },

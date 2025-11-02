@@ -2,7 +2,6 @@
 import { notFound } from 'next/navigation';
 import ChatWindow from '@/components/ChatWindow';
 import { auth } from '@/lib/auth'
-import { authOptions } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 
 interface ChannelPageProps {

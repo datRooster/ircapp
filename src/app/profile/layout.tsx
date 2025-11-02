@@ -1,6 +1,5 @@
 import { ReactNode } from 'react'
 import { prisma } from '@/lib/prisma'
-import ChannelSidebar from '@/components/ChannelSidebar'
 
 // Sidebar statica: solo lista canali, nessun handler
 export default async function ProfileLayout({ children }: { children: ReactNode }) {

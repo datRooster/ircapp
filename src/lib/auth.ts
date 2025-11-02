@@ -1,7 +1,6 @@
 import NextAuth, { NextAuthConfig } from 'next-auth'
 import Credentials from 'next-auth/providers/credentials'
 import GitHub from 'next-auth/providers/github'
-import { PrismaAdapter } from '@auth/prisma-adapter'
 import { prisma } from './prisma'
 import bcrypt from 'bcryptjs'
 
@@ -193,7 +192,7 @@ export const authOptions: NextAuthConfig = {
       
       return true // Per credentials provider
     },
-    async jwt({ token, user, account }) {
+    async jwt({ token, user }) {
       if (user) {
         token.username = (user as any).username
         token.roles = (user as any).roles

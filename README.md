@@ -32,149 +32,344 @@ Una moderna applicazione web per community IRC costruita con le ultime tecnologi
 ```markdown
 # IRC Community Web App
 
-Applicazione web per community IRC che mette insieme Next.js, TypeScript, Tailwind e un bridge verso client IRC testuali.
+> **Applicazione web moderna per community IRC con interfaccia Next.js e bridge IRC personalizzato**
 
-Questo repository contiene sia la webapp (Next.js App Router) sia il bridge HTTP/IRC (bot) e uno starter per il server IRC locale.
+[![Next.js](https://img.shields.io/badge/Next.js-16-black)](https://nextjs.org/)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5-blue)](https://www.typescriptlang.org/)
+[![Prisma](https://img.shields.io/badge/Prisma-5-brightgreen)](https://www.prisma.io/)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-Latest-blue)](https://www.postgresql.org/)
 
-## Obiettivo di questo repository
-- Fornire un'interfaccia web moderna per canali IRC
-- Permettere sincronizzazione bidirezionale tra webapp e server IRC reale tramite un bridge (bot)
-- Essere deployabile (Vercel / Railway / Docker)
+Questo progetto combina:
+- **Frontend moderno**: Next.js 16 + React 19 + Tailwind CSS
+- **IRC Server custom**: TypeScript implementation con canali e permessi
+- **Bridge HTTP→IRC**: Bot Node.js che sincronizza webapp ↔ IRC
+- **Database**: PostgreSQL con Prisma ORM
+- **Autenticazione**: NextAuth.js v5 (GitHub OAuth + Credentials)
+- **Cifratura**: AES-256-GCM end-to-end per messaggi
+
+📖 **[Leggi l'architettura completa →](./ARCHITECTURE.md)**
 
 ---
 
-## Struttura importante e comandi principali
+## 🚀 Quick Start
 
-- `npm run dev` — avvia la webapp in sviluppo (Next.js)
-- `npm run irc:start` — avvia il server IRC (TypeScript starter in `src/irc-server`)
-- `node webapp-bot.js` — avvia il bridge HTTP→IRC (bot) che riceve POST da `/api/socketio`
-- `node webapp-bot.js` — avvia il bridge HTTP→IRC (bot) che riceve POST da `/api/socketio`
-- `npm run dev:full` — (concurrently) esegue webapp + IRC server insieme
+### Prerequisiti
 
-Consiglio per sviluppo locale (zsh):
+- Node.js 20+
+- PostgreSQL 14+
+- Git
+
+### Installazione
 
 ```bash
-# 1) Installa dipendenze
-npm install --legacy-peer-deps
+# 1. Clona repository
+git clone https://github.com/datRooster/ircapp.git
+cd ircapp
 
-# 2) Avvia il server IRC (in un terminale separato)
-npm run irc:start
+# 2. Installa dipendenze
+npm install
 
-# 3) Avvia il bridge bot (in un altro terminale)
-node webapp-bot.js
+# 3. Configura database
+createdb ircapp  # Crea database PostgreSQL
+cp .env.example .env.local  # Copia e configura variabili ambiente
 
-# 4) Avvia la webapp
-npm run dev -- --port 3000
-
-# Oppure tutto insieme (richiede concurrently)
-npm run dev:full
-```
-
----
-
-## Come funziona la sincronizzazione (breve)
-
-- La webapp emette eventi (via `useSocket`) che POSTano a `/api/socketio` con `action: 'send-message'`.
-- L'API `/api/socketio` salva il messaggio su Prisma e inoltra al bridge bot su `http://localhost:4000/send-irc`.
-- Il bridge (`webapp-bot.js`) invia il messaggio al server IRC; quando riceve messaggi da IRC li POSTa a `/api/socketio` con `action: 'irc-message'`.
-- `useSocket` polla `/api/socketio` con `action: 'get-messages'` per ottenere nuovi messaggi.
-
----
-
-## Deployment e note pratiche
-
-1) Vercel
-- Push su GitHub e configura Vercel per il repo. Assicurati di impostare le variabili d'ambiente nel progetto Vercel (es. `DATABASE_URL`, `NEXTAUTH_SECRET`, provider OAuth).
-
-2) Railway / Server con PostgreSQL
-- Se usi Railway, aggiungi PostgreSQL e imposta le variabili elencate nella sezione "Railway / Production" qui sotto.
-
-3) Avviare servizi in produzione
-- On Vercel la parte bot/bridge non gira automaticamente: in produzione raccomando di eseguire il bot come servizio separato (Heroku, Railway, Docker container o VM) che faccia listen sulla porta 4000 e possa comunicare con la webapp tramite HTTPS.
-
----
-
-## Railway / Production (sintesi)
-
-Variabili ambiente importanti da impostare in produzione:
-
-```env
-DATABASE_URL=postgresql://...
-NEXTAUTH_SECRET=your-super-secret-key
-NEXTAUTH_URL=https://your-app.domain
-GITHUB_CLIENT_ID=...
-GITHUB_CLIENT_SECRET=...
-ADMIN_EMAIL=admin@yourdomain
-```
-
-Eseguire le migrazioni Prisma in produzione:
-
-```bash
+# 4. Esegui migrazioni Prisma
 npx prisma migrate deploy
 npx prisma generate
+
+# 5. (Opzionale) Seed database iniziale
+npx tsx prisma/seed-guest-help.ts
+npm run create-bot  # Crea utente bot IRC
 ```
 
-Environment variables utili per il bot
-- `WEBAPP_HOST` — URL (incluso protocollo e porta) della webapp per le notifiche IRC→webapp (es. `http://localhost:`). Se non impostato il bot userà `http://localhost:3000`.
+### Configurazione Variabili Ambiente
 
-### Cifratura end-to-end (opzione bot-decrypt)
+Crea `.env.local` con:
 
-Questo progetto supporta ora un flusso "bot-decrypt" per i messaggi contrassegnati come cifrati dalla webapp:
+```env
+DATABASE_URL="postgresql://user:password@localhost:5432/ircapp"
+NEXTAUTH_SECRET="genera-con-openssl-rand-base64-32"
+NEXTAUTH_URL="http://localhost:3000"
+GITHUB_CLIENT_ID="your-github-oauth-id"
+GITHUB_CLIENT_SECRET="your-github-oauth-secret"
+IRC_ENCRYPTION_KEY="genera-con-openssl-rand-base64-32"
+WEBAPP_ENC_KEY="stesso-valore-di-IRC_ENCRYPTION_KEY"
+ADMIN_USERNAME="admin"
+ADMIN_PASSWORD="cambiami123"
+ADMIN_EMAIL="admin@localhost"
+```
 
-- Impostare la variabile d'ambiente `WEBAPP_ENC_KEY` con una chiave AES-256 (32 byte) codificata in base64. Esempio generazione:
+---
+
+## 🎮 Comandi Principali
 
 ```bash
-# Genera 32 bytes e stampa base64
+# Sviluppo
+npm run dev              # Avvia webapp Next.js (port 3000)
+npm run irc:start        # Avvia IRC server (port 6667)
+npm run irc:dev          # IRC server con watch mode
+npm run bot:start        # Avvia bridge bot (port 4000)
+npm run dev:full         # Webapp + IRC server insieme
+npm run dev:all          # Webapp + IRC + bot insieme
+
+# Database
+npm run db:migrate       # Esegui migrazioni Prisma
+npm run db:studio        # GUI Prisma Studio
+npm run create-bot       # Crea utente bot IRC nel DB
+
+# Build & Production
+npm run build            # Build produzione Next.js
+npm run start            # Start produzione
+
+# Linting
+npm run lint             # ESLint check
+```
+
+### Sviluppo Locale - Consigliato
+
+**Opzione 1**: Tutto in un comando
+```bash
+npm run dev:all
+```
+
+**Opzione 2**: Terminali separati (debug migliore)
+```bash
+# Terminal 1: Webapp
+npm run dev
+
+# Terminal 2: IRC Server
+npm run irc:start
+
+# Terminal 3: Bridge Bot
+npm run bot:start
+```
+
+---
+
+## 🏗️ Architettura Semplificata
+
+```
+Webapp (Next.js) → API Routes → Bridge Bot → IRC Server ⇄ Client IRC Esterni
+       ↑                                            ↓
+       └────────────← Polling (ogni 2s) ←──────────┘
+```
+
+**Flusso messaggi**:
+1. Utente scrive in webapp
+2. POST `/api/socketio` → Bridge bot
+3. Bot invia a IRC server
+4. IRC server broadcast a tutti
+5. Bot riceve echo, cifra e salva in DB
+6. Webapp polling carica nuovi messaggi
+
+📖 **[Dettagli architettura completa →](./ARCHITECTURE.md)**
+
+---
+
+## 🌍 Deployment Produzione
+
+### Webapp → Vercel
+
+```bash
+# 1. Push su GitHub
+git push origin main
+
+# 2. Connetti repository su Vercel
+# 3. Configura variabili ambiente (vedi sotto)
+# 4. Deploy automatico ✅
+```
+
+### Bot Bridge → Railway/Heroku/VPS
+
+```bash
+# Railway
+railway up
+railway variables set WEBAPP_HOST="https://your-app.vercel.app"
+
+# VPS
+pm2 start npm --name "irc-bot" -- run bot:start
+pm2 save
+```
+
+### Variabili Ambiente Produzione
+
+```env
+# Database
+DATABASE_URL="postgresql://user:pass@host:5432/dbname"
+
+# Auth
+NEXTAUTH_SECRET="openssl-rand-base64-32"
+NEXTAUTH_URL="https://your-domain.com"
+
+# OAuth
+GITHUB_CLIENT_ID="..."
+GITHUB_CLIENT_SECRET="..."
+
+# Cifratura
+IRC_ENCRYPTION_KEY="base64-32-bytes"
+WEBAPP_ENC_KEY="same-as-above"
+
+# Admin
+ADMIN_USERNAME="admin"
+ADMIN_PASSWORD="secure-password"
+ADMIN_EMAIL="admin@domain.com"
+
+# Bot (solo se separato dalla webapp)
+WEBAPP_HOST="https://your-webapp-url.com"
+```
+
+**Post-deploy checklist**:
+```bash
+npx prisma migrate deploy  # Applica migrazioni
+npx prisma generate        # Genera Prisma Client
+npm run create-bot         # Crea utente bot IRC
+```
+
+---
+
+## 🔒 Sicurezza & Cifratura
+
+I messaggi sono cifrati at-rest usando **AES-256-GCM**:
+
+- ✅ Cifratura automatica prima del salvataggio DB
+- ✅ Decifratura server-side prima dell'invio a frontend
+- ✅ IV e Tag unici per ogni messaggio
+
+**Genera chiave cifratura**:
+```bash
 openssl rand -base64 32
 ```
 
-- In ambienti di sviluppo è possibile mettere `WEBAPP_ENC_KEY` nel file `.env` (ma in produzione usare secret manager).
-- Flusso:
-	- Il client web cifra il messaggio con AES-256-GCM usando la chiave ottenuta dall'endpoint protetto `/api/keys` e invia `content` (base64 ciphertext) + `iv` + `encrypted: true` a `/api/socketio`.
-	- L'API salva il messaggio cifrato e inoltra il payload al bot (includendo `encrypted` e `iv`).
-	- Il bot (se `WEBAPP_ENC_KEY` è impostata) decripta il messaggio e invia il plaintext su IRC, mantenendo una UX compatibile con client IRC tradizionali.
-	- Quando il bot riceve messaggi da IRC li cifra e li POSTa a `/api/socketio` (se `WEBAPP_ENC_KEY` configurata), così la webapp riceve payload cifrati e li decifra client-side.
-
-Nota importante di sicurezza:
-- Questo approccio NON è E2E dal punto di vista strettissimo: il bot possiede la chiave e può leggere i plaintext. Per E2E reale occorre un sistema di gestione chiavi più complesso (chiavi per utente, scambio di chiavi, plugin per client IRC esterni) e non fornito qui.
-- Assicurati di memorizzare `WEBAPP_ENC_KEY` in un secret manager (es. Vercel Secrets, Railway secrets, HashiCorp Vault) in produzione. Non committare la chiave nel repo.
-
-Migrazione Prisma:
-- Abbiamo aggiunto i campi `encrypted`, `iv` e `keyId` al modello `Message`. Dopo pull/merge esegui le migrazioni e genera il client Prisma:
-
-```bash
-npx prisma migrate dev --name add-encryption-fields
-npx prisma generate
+Imposta in `.env.local`:
+```env
+IRC_ENCRYPTION_KEY="output-comando-sopra"
+WEBAPP_ENC_KEY="stesso-valore"
 ```
 
+⚠️ **Nota**: Questo è "bot-decrypt", non E2E puro. Il bot può leggere i messaggi. Per vera E2E servirebbero chiavi per utente.
+
+📖 **[Dettagli cifratura →](./ARCHITECTURE.md#-sistema-di-cifratura)**
+
 
 ---
 
-## Developer notes (consolidate)
+## 🧪 Testing
 
-- Use TypeScript and Tailwind for new components
-- Keep server-side auth checks tramite `src/lib/auth.ts`
-- Evitare log debug eccessivi in produzione; preferisci logger con livelli
+### Test Client IRC
+
+```bash
+# Connetti con client IRC esterno (es. irssi, weechat, hexchat)
+/server localhost 6667
+/nick your-nickname
+/join #general
+```
+
+Invia messaggi e verifica sincronizzazione bidirezionale webapp ↔ IRC.
+
+### Debug
+
+```bash
+# Logs realtime
+npm run dev        # Webapp logs nel terminal
+npm run irc:dev    # IRC server logs con watch
+npm run bot:start  # Bot bridge logs
+
+# Database GUI
+npm run db:studio  # Prisma Studio su http://localhost:5555
+```
 
 ---
 
-## File rimossi/unificati in questa pulizia
+## 📖 Documentazione
 
-- Il contenuto di `RAILWAY_SETUP.md` e `.github/copilot-instructions.md` è stato consolidato qui.
-- Alcuni file di test di setup locali hanno been archiviati o rimossi (vedi git history).
-
----
-
-## Conclusione
-
-Ho consolidato la documentazione principale in questo `README.md`. Per il deploy su Vercel ricorda di esporre il bot come servizio separato e di impostare le variabili d'ambiente. Se vuoi, posso:
-
-- Aggiungere script npm per avviare bot e IRC server insieme con PM2 / Docker
-- Commitare ulteriori pulizie (rimuovere file test locali) o archiviarli in `./archive`
+- **[ARCHITECTURE.md](./ARCHITECTURE.md)** - Architettura tecnica completa
+- **[LICENSE](./LICENSE)** - Licenza MIT
 
 ---
 
-_Ultima modifica automatica: 27 ottobre 2025_
+## 🤝 Contributing
+
+Contributi benvenuti! Steps:
+
+1. Fork del repository
+2. Crea feature branch (`git checkout -b feature/amazing`)
+3. Commit changes (`git commit -m 'Add amazing feature'`)
+4. Push al branch (`git push origin feature/amazing`)
+5. Apri Pull Request
+
+---
+
+## 📝 Developer Notes
+
+- **TypeScript strict mode**: Tutti i file sono type-safe
+- **Modularità**: Logica separata in hooks e services
+- **Clean code**: ESLint configurato, segui le convenzioni
+- **Auth checks**: Sempre server-side tramite `src/lib/auth.ts`
+- **Sicurezza**: Mai esporre chiavi cifratura in frontend
+
+---
+
+## 🛠️ Troubleshooting
+
+**Bot non riceve messaggi?**
+- Verifica `http://localhost:4000/send-irc` risponde
+- Check `WEBAPP_ENC_KEY` impostata correttamente
+
+**Messaggi non appaiono in webapp?**
+- Apri DevTools → Network → verifica polling `/api/socketio`
+- Check database: `npm run db:studio`
+
+**Client IRC non riceve?**
+- Bot connesso? Controlla log "User connected"
+- Porta 6667 aperta? `netstat -an | grep 6667`
+
+📖 **[Troubleshooting completo →](./ARCHITECTURE.md#-troubleshooting)**
+
+---
+
+## � Production Deployment
+
+### Quick Deploy to Vercel
+
+```bash
+# 1. Generate production secrets
+./scripts/generate-secrets.sh
+
+# 2. Push to GitHub
+git push origin main
+
+# 3. Deploy to Vercel
+# Visit https://vercel.com/new and import your repository
+```
+
+### Environment Variables
+
+Configura queste variabili su Vercel:
+
+```bash
+DATABASE_URL=<your-railway-postgres-url>
+NEXTAUTH_SECRET=<generate-with-openssl>
+NEXTAUTH_URL=https://your-app.vercel.app
+GITHUB_CLIENT_ID=<your-github-oauth-id>
+GITHUB_CLIENT_SECRET=<your-github-oauth-secret>
+WEBAPP_ENC_KEY=<generate-with-openssl>
+IRC_ENCRYPTION_KEY=<generate-with-openssl>
+```
+
+📖 **[Guida completa deployment →](./DEPLOYMENT.md)**
+
+---
+
+## �📜 License
+
+MIT License - vedi [LICENSE](./LICENSE)
+
+---
+
+**Progetto sviluppato da [@datRooster](https://github.com/datRooster)**  
+Portfolio: [www.webrooster.it](https://www.webrooster.it)
+
+_Ultimo aggiornamento: 2 novembre 2025_
 
 ```
 - **Autenticazione utenti**: NextAuth configurato

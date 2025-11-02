@@ -64,7 +64,6 @@ export default async function ProfilePage() {
   const totalChannels = user.createdChannels.length
   const totalMemberships = user.channelMembers.length
   const totalMessages = user.messages.length
-  const lastMessage = user.messages.length > 0 ? user.messages[user.messages.length - 1] : null
 
   return (
     <main className="min-h-screen bg-linear-to-br from-[#0a0f1a] via-[#10182a] to-[#0a0f1a] flex flex-col items-center py-0 px-2">

@@ -1,16 +1,11 @@
 'use client'
 
-import React from 'react'
 import { 
   FaCrown, 
-  FaUsers, 
-  FaComments, 
   FaShieldAlt, 
   FaTerminal, 
   FaHome, 
-  FaLightbulb,
   FaExclamationTriangle,
-  FaLock,
   FaHeart
 } from 'react-icons/fa'
 

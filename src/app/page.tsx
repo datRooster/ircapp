@@ -12,7 +12,6 @@ export default function Home() {
   const [channels, setChannels] = useState<Channel[]>([])
   const [currentChannel, setCurrentChannel] = useState<string | null>(null)
   const [showAdminPanel, setShowAdminPanel] = useState(false)
-  const [loading, setLoading] = useState(true)
 
   // Carica canali dal database o mostra guest/help se guest
   const loadChannels = async () => {
@@ -40,8 +39,6 @@ export default function Home() {
       }
     } catch (error) {
       console.error('Error loading channels:', error)
-    } finally {
-      setLoading(false)
     }
   }
 
@@ -72,11 +69,6 @@ export default function Home() {
 
   const handleChannelSelect = (channelId: string) => {
     setCurrentChannel(channelId)
-  }
-
-  const handleCreateChannel = () => {
-    // TODO: Implement channel creation
-    console.log('Creating new channel...')
   }
 
   const handleOpenAdminPanel = () => {
@@ -122,7 +114,6 @@ export default function Home() {
         channels={channels}
         currentChannel={currentChannel}
         onChannelSelect={handleChannelSelect}
-        onCreateChannel={handleCreateChannel}
         userRole={currentUser.roles.includes('admin') ? 'admin' : currentUser.roles.includes('moderator') ? 'moderator' : isGuest ? 'guest' : 'user'}
         username={currentUser.username}
         onOpenAdminPanel={handleOpenAdminPanel}

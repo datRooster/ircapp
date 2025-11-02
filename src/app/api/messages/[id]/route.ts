@@ -1,9 +1,9 @@
-import { NextRequest, NextResponse } from 'next/server'
+import { NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 
 // DELETE /api/messages/[id]
-export async function DELETE(req: NextRequest, context: any) {
+export async function DELETE(_req: Request, context: any) {
   try {
     const session = await auth()
     if (!session?.user) {

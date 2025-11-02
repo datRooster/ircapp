@@ -9,7 +9,7 @@ export async function POST(req: NextRequest) {
   // RIMOSSI log su variabili non ancora dichiarate
   try {
     const data = await req.json();
-    const { content, userId, channelId, action, encrypted } = data;
+    const { content, channelId, action } = data;
 
     // Webapp -> bot flow handled below (forward to bot bridge). We don't save plaintext/encrypted message here
 
@@ -30,16 +30,31 @@ export async function POST(req: NextRequest) {
             ? (data.channelName.startsWith('#') ? data.channelName : `#${data.channelName}`)
             : (channelId && typeof channelId === 'string' && channelId.startsWith('#') ? channelId : `#${channelId}`)
 
+          // Cifra il messaggio prima di inviarlo al bot
+          const { SecureIRCProtocol } = require('@/lib/secure-irc.server')
+          const sanitized = SecureIRCProtocol.sanitizeContent(content)
+          const encryptedObj = SecureIRCProtocol.encryptMessage(sanitized)
+
+          // Debug: log dei dati cifrati
+          console.log('[API][DEBUG] Sending to bot:', JSON.stringify({
+            channel: channelForBridge,
+            messagePreview: encryptedObj.encryptedContent?.slice(0, 50),
+            from: data.username,
+            encrypted: true,
+            ivPreview: encryptedObj.iv?.slice(0, 20),
+            keyIdPreview: encryptedObj.tag?.slice(0, 20)
+          }))
+
           const res = await fetch(bridgeUrl, {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
               channel: channelForBridge,
-              message: content,
+              message: encryptedObj.encryptedContent,
               from: data.username,
-              encrypted: !!encrypted,
-              iv: typeof data.iv === 'string' ? data.iv : undefined,
-              keyId: typeof data.keyId === 'string' ? data.keyId : undefined
+              encrypted: true,
+              iv: encryptedObj.iv,
+              keyId: encryptedObj.tag
             }),
             signal: controller.signal
           });
@@ -97,11 +112,11 @@ export async function POST(req: NextRequest) {
                 const bridgeUrl = 'http://localhost:4000/send-irc'
                 const body = JSON.stringify({
                   channel: channelId.startsWith('#') ? channelId : `#${channelId}`,
-                  message: content,
+                  message: encryptedObj.encryptedContent,
                   from: data.username,
                   encrypted: true,
                   iv: encryptedObj.iv,
-                  tag: encryptedObj.tag
+                  keyId: encryptedObj.tag
                 })
                 const notifyController = new AbortController()
                 const notifyTimeout = setTimeout(() => notifyController.abort(), 5000)

@@ -1,7 +1,16 @@
 import React, { useState, useEffect } from 'react'
-import { useSetTopic } from '../hooks/useSetTopic'
 import TopicEditor from './TopicEditor'
-import { FaCrown, FaPlus, FaCog, FaUsers, FaShieldAlt, FaArchive, FaEdit, FaTrash } from 'react-icons/fa'
+import { 
+  X, 
+  Hash, 
+  Users, 
+  Shield, 
+  Plus, 
+  Edit, 
+  Trash2, 
+  Archive,
+  Settings
+} from 'lucide-react'
 
 interface Channel {
   id: string
@@ -129,10 +138,10 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ userRole, onClose }) => {
         <div className="flex items-center justify-between p-3 bg-gray-800 rounded-lg mb-2">
           <div className="flex items-center space-x-3">
             <div className="flex items-center space-x-2">
-              {channel.category === 'ADMIN' && <FaCrown className="text-yellow-400" />}
-              {channel.category === 'MODERATION' && <FaShieldAlt className="text-blue-400" />}
-              {channel.isPrivate && <FaShieldAlt className="text-red-400" />}
-              {channel.isArchived && <FaArchive className="text-gray-400" />}
+              {channel.category === 'ADMIN' && <Settings className="text-amber-500 w-3.5 h-3.5" />}
+              {channel.category === 'MODERATION' && <Shield className="text-blue-500 w-3.5 h-3.5" />}
+              {channel.isPrivate && <Shield className="text-red-500 w-3.5 h-3.5" />}
+              {channel.isArchived && <Archive className="text-gray-400 w-3.5 h-3.5" />}
               <span className="font-medium text-white">#{channel.name}</span>
             </div>
             <div className="text-sm text-gray-400">
@@ -145,16 +154,16 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ userRole, onClose }) => {
               {channel.category}
             </span>
             <span className="text-xs text-gray-400">
-              <FaUsers className="inline mr-1" />
+              <Users className="inline w-4 h-4 mr-1" />
               {channel._count?.members || 0}
             </span>
             {(userRole === 'admin' || userRole === 'moderator') && (
               <div className="flex space-x-1">
                 <button className="p-1 text-blue-400 hover:bg-blue-400/20 rounded" onClick={() => { setEditingChannel(channel); setEditData({}) }}>
-                  <FaEdit size={12} />
+                  <Edit className="w-3 h-3" />
                 </button>
                 <button className="p-1 text-red-400 hover:bg-red-400/20 rounded">
-                  <FaTrash size={12} />
+                  <Trash2 className="w-3 h-3" />
                 </button>
               </div>
             )}
@@ -172,77 +181,107 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ userRole, onClose }) => {
 
   const canCreateChannels = userRole === 'admin' || userRole === 'moderator'
 
+  // Access Denied - Enterprise Alert
   if (!['admin', 'moderator'].includes(userRole)) {
     return (
-      <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-        <div className="bg-gray-900 p-6 rounded-lg max-w-md w-full mx-4">
-          <h2 className="text-xl font-bold text-red-400 mb-4">Accesso Negato</h2>
-          <p className="text-gray-300 mb-4">
-            Non hai i permessi necessari per accedere al pannello di amministrazione.
-          </p>
+      <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+        <div className="bg-white dark:bg-gray-800 rounded-xl shadow-2xl max-w-md w-full p-6">
+          <div className="flex items-start gap-4 mb-4">
+            <div className="shrink-0 w-12 h-12 rounded-full bg-red-100 dark:bg-red-900/30 
+                          flex items-center justify-center">
+              <Shield className="w-6 h-6 text-red-600 dark:text-red-400" />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white mb-2">
+                Access Denied
+              </h2>
+              <p className="text-gray-600 dark:text-gray-300">
+                You don't have the necessary permissions to access the administration panel.
+              </p>
+            </div>
+          </div>
           <button 
             onClick={onClose}
-            className="w-full bg-red-600 hover:bg-red-700 text-white py-2 px-4 rounded"
+            className="w-full py-2.5 px-4 bg-red-600 hover:bg-red-700 text-white font-medium
+                     rounded-lg transition-colors"
           >
-            Chiudi
+            Close
           </button>
         </div>
       </div>
     )
   }
 
+  // Main Admin Panel - Enterprise Design
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50">
-      <div className="bg-gray-900 w-full max-w-6xl h-5/6 mx-4 rounded-lg flex flex-col">
-        {/* Header */}
-        <div className="flex items-center justify-between p-4 border-b border-gray-700">
-          <div className="flex items-center space-x-3">
-            <FaCrown className="text-yellow-400" />
-            <h2 className="text-xl font-bold text-white">Pannello Amministrazione</h2>
-            <span className="text-sm bg-blue-600 px-2 py-1 rounded">{userRole}</span>
+    <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-white dark:bg-gray-900 w-full max-w-7xl h-[90vh] rounded-xl shadow-2xl flex flex-col overflow-hidden">
+        {/* Header - Enterprise */}
+        <div className="flex items-center justify-between px-6 py-4 border-b border-gray-200 dark:border-gray-800 
+                      bg-linear-to-r from-amber-50 to-orange-50 dark:from-amber-900/20 dark:to-orange-900/20">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 rounded-lg bg-linear-to-br from-amber-500 to-orange-500 
+                          flex items-center justify-center shadow-lg">
+              <Settings className="w-6 h-6 text-white" />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold text-gray-900 dark:text-white">
+                Administration Panel
+              </h2>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Manage channels, users, and security settings
+              </p>
+            </div>
           </div>
-          <button 
-            onClick={onClose}
-            className="text-gray-400 hover:text-white text-xl"
-          >
-            ×
-          </button>
+          <div className="flex items-center gap-3">
+            <span className="px-3 py-1.5 rounded-lg bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700
+                           text-sm font-medium text-gray-700 dark:text-gray-300 capitalize">
+              {userRole}
+            </span>
+            <button 
+              onClick={onClose}
+              className="p-2 rounded-lg text-gray-400 hover:text-gray-600 dark:hover:text-gray-300
+                       hover:bg-white dark:hover:bg-gray-800 transition-colors"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
         </div>
 
-        {/* Tabs */}
-        <div className="flex border-b border-gray-700">
+        {/* Tabs - Enterprise Navigation */}
+        <div className="flex border-b border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950 px-6">
           <button
             onClick={() => setActiveTab('channels')}
-            className={`px-6 py-3 font-medium ${
-              activeTab === 'channels' 
-                ? 'text-blue-400 border-b-2 border-blue-400' 
-                : 'text-gray-400 hover:text-white'
-            }`}
+            className={`inline-flex items-center gap-2 px-4 py-3 font-medium text-sm border-b-2 transition-colors
+              ${activeTab === 'channels' 
+                ? 'border-blue-500 text-blue-600 dark:text-blue-400' 
+                : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
+              }`}
           >
-            <FaCog className="inline mr-2" />
-            Gestione Canali
+            <Hash className="w-4 h-4" />
+            <span>Channel Management</span>
           </button>
           <button
             onClick={() => setActiveTab('users')}
-            className={`px-6 py-3 font-medium ${
-              activeTab === 'users' 
-                ? 'text-blue-400 border-b-2 border-blue-400' 
-                : 'text-gray-400 hover:text-white'
-            }`}
+            className={`inline-flex items-center gap-2 px-4 py-3 font-medium text-sm border-b-2 transition-colors
+              ${activeTab === 'users' 
+                ? 'border-blue-500 text-blue-600 dark:text-blue-400' 
+                : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
+              }`}
           >
-            <FaUsers className="inline mr-2" />
-            Gestione Utenti
+            <Users className="w-4 h-4" />
+            <span>User Management</span>
           </button>
           <button
             onClick={() => setActiveTab('security')}
-            className={`px-6 py-3 font-medium ${
-              activeTab === 'security' 
-                ? 'text-blue-400 border-b-2 border-blue-400' 
-                : 'text-gray-400 hover:text-white'
-            }`}
+            className={`inline-flex items-center gap-2 px-4 py-3 font-medium text-sm border-b-2 transition-colors
+              ${activeTab === 'security' 
+                ? 'border-blue-500 text-blue-600 dark:text-blue-400' 
+                : 'border-transparent text-gray-600 dark:text-gray-400 hover:text-gray-900 dark:hover:text-gray-200'
+              }`}
           >
-            <FaShieldAlt className="inline mr-2" />
-            Sicurezza
+            <Shield className="w-4 h-4" />
+            <span>Security</span>
           </button>
         </div>
 
@@ -256,10 +295,11 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ userRole, onClose }) => {
                 {canCreateChannels && (
                   <button
                     onClick={() => setShowCreateChannel(true)}
-                    className="bg-green-600 hover:bg-green-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2"
+                    className="inline-flex items-center gap-2 px-4 py-2.5 bg-blue-600 hover:bg-blue-700 
+                             text-white font-medium rounded-lg transition-colors shadow-sm"
                   >
-                    <FaPlus />
-                    <span>Nuovo Canale</span>
+                    <Plus className="w-4 h-4" />
+                    <span>Create Channel</span>
                   </button>
                 )}
               </div>

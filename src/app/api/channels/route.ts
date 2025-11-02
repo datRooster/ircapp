@@ -56,8 +56,8 @@ export async function GET() {
 
     // Carica canali in base ai permessi dell'utente
     const userRoles = user.roles
-    const isAdmin = userRoles.includes('admin')
-    const isModerator = userRoles.includes('moderator')
+    // const isAdmin = userRoles.includes('admin')
+    // const isModerator = userRoles.includes('moderator')
 
 
     // Tutti vedono tutti i canali non archiviati
@@ -105,18 +105,5 @@ export async function GET() {
   } catch (error) {
     console.error('Error fetching channels:', error)
     return NextResponse.json({ error: 'Internal server error' }, { status: 500 })
-  }
-}
-
-function getRolesFromCategory(category: string, requiredRole: string): string[] {
-  switch (category) {
-    case 'ADMIN':
-      return ['admin']
-    case 'MODERATION':
-      return ['admin', 'moderator']
-    case 'PRIVATE':
-      return [requiredRole]
-    default:
-      return ['user', 'moderator', 'admin']
   }
 }
