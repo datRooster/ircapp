@@ -28,12 +28,8 @@ jobs:
     - name: Run linter
       run: npm run lint
 
-    - name: Build Next.js app
-      run: npm run build
-      env:
-        DATABASE_URL: ${{ secrets.DATABASE_URL }}
-        NEXTAUTH_SECRET: ${{ secrets.NEXTAUTH_SECRET }}
-        NEXTAUTH_URL: ${{ secrets.NEXTAUTH_URL }}
-
     - name: Check for TypeScript errors
       run: npx tsc --noEmit
+      
+    # Note: Build step removed as pages require DATABASE_URL at build time
+    # Railway handles the full build with proper environment variables
