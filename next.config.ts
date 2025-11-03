@@ -27,32 +27,32 @@ const nextConfig: NextConfig = {
   env: {
     NEXTAUTH_URL: process.env.NEXTAUTH_URL || 'http://localhost:3000',
   },
-};
 
-async headers() {
-  return [
-    {
-      source: '/:path*',
-      headers: [
-        {
-          key: 'X-Frame-Options',
-          value: 'ALLOW-FROM https://www.webrooster.it',
-        },
-        {
-          key: 'Content-Security-Policy',
-          value: "frame-ancestors 'self' https://www.webrooster.it https://localhost:3000",
-        },
-        {
-          key: 'Access-Control-Allow-Origin',
-          value: 'https://www.webrooster.it',
-        },
-        {
-          key: 'Access-Control-Allow-Credentials',
-          value: 'true',
-        },
-      ],
-    },
-  ];
-},
+  async headers() {
+    return [
+      {
+        source: '/:path*',
+        headers: [
+          {
+            key: 'X-Frame-Options',
+            value: 'ALLOW-FROM https://www.webrooster.it',
+          },
+          {
+            key: 'Content-Security-Policy',
+            value: "frame-ancestors 'self' https://www.webrooster.it https://localhost:3000",
+          },
+          {
+            key: 'Access-Control-Allow-Origin',
+            value: 'https://www.webrooster.it',
+          },
+          {
+            key: 'Access-Control-Allow-Credentials',
+            value: 'true',
+          },
+        ],
+      },
+    ];
+  },
+};
 
 export default nextConfig;
