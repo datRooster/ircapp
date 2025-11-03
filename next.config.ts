@@ -29,4 +29,30 @@ const nextConfig: NextConfig = {
   },
 };
 
+async headers() {
+  return [
+    {
+      source: '/:path*',
+      headers: [
+        {
+          key: 'X-Frame-Options',
+          value: 'ALLOW-FROM https://www.webrooster.it',
+        },
+        {
+          key: 'Content-Security-Policy',
+          value: "frame-ancestors 'self' https://www.webrooster.it https://localhost:3000",
+        },
+        {
+          key: 'Access-Control-Allow-Origin',
+          value: 'https://www.webrooster.it',
+        },
+        {
+          key: 'Access-Control-Allow-Credentials',
+          value: 'true',
+        },
+      ],
+    },
+  ];
+},
+
 export default nextConfig;
