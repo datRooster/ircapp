@@ -34,16 +34,20 @@ const nextConfig: NextConfig = {
         source: '/:path*',
         headers: [
           {
-            key: 'X-Frame-Options',
-            value: 'ALLOW-FROM https://www.webrooster.it',
-          },
-          {
             key: 'Content-Security-Policy',
-            value: "frame-ancestors 'self' https://www.webrooster.it https://webrooster.it http://localhost:3000",
+            value: "frame-ancestors 'self' https://www.webrooster.it https://webrooster.it http://localhost:3000 https://localhost:3000",
           },
           {
             key: 'Access-Control-Allow-Origin',
             value: 'https://www.webrooster.it',
+          },
+          {
+            key: 'Access-Control-Allow-Methods',
+            value: 'GET, POST, PUT, DELETE, OPTIONS',
+          },
+          {
+            key: 'Access-Control-Allow-Headers',
+            value: 'X-Requested-With, Content-Type, Authorization',
           },
           {
             key: 'Access-Control-Allow-Credentials',
