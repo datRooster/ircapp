@@ -39,7 +39,7 @@ const nextConfig: NextConfig = {
           },
           {
             key: 'Content-Security-Policy',
-            value: "frame-ancestors 'self' https://www.webrooster.it https://localhost:3000",
+            value: "frame-ancestors 'self' https://www.webrooster.it https://webrooster.it http://localhost:3000",
           },
           {
             key: 'Access-Control-Allow-Origin',
