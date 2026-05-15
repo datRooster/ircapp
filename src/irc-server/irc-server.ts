@@ -31,7 +31,7 @@ export class IRCServer extends EventEmitter {
   }
 
   private setupServer() {
-    this.server.on('connection', (socket) => {
+    const registerClient = (socket: net.Socket) => {
       console.log(`🔌 New IRC connection from ${socket.remoteAddress}:${socket.remotePort}`)
       
       const client = new IRCClient(socket, this)
@@ -46,7 +46,21 @@ export class IRCServer extends EventEmitter {
       client.on('message', (message: IRCMessage) => {
         this.handleMessage(client, message)
       })
-    })
+    }
+
+    if (this.tlsEnabled) {
+      ;(this.server as tls.Server).on('secureConnection', (socket) => {
+        registerClient(socket)
+      })
+
+      ;(this.server as tls.Server).on('tlsClientError', (error, socket) => {
+        console.error(`TLS client error from ${socket.remoteAddress}:${socket.remotePort}:`, error)
+      })
+    } else {
+      ;(this.server as net.Server).on('connection', (socket) => {
+        registerClient(socket)
+      })
+    }
 
     this.server.on('error', (error) => {
       console.error('IRC Server error:', error)
