@@ -315,6 +315,32 @@ export class IRCServer extends EventEmitter {
           }
         }
 
+        // Messaggi provenienti da un client IRC esterno non autenticato alla webapp
+        // vanno comunque attribuiti al suo nick, non ad "anonymous".
+        if (!saveUserId && client.nickname) {
+          try {
+            const ircUser = await this.prisma.user.upsert({
+              where: { username: client.nickname },
+              update: {
+                name: client.nickname,
+                isOnline: true,
+                lastSeen: new Date()
+              },
+              create: {
+                username: client.nickname,
+                name: client.nickname,
+                password: null,
+                isOnline: true,
+                roles: ['user']
+              }
+            })
+            saveUserId = ircUser.id
+            client.userId = ircUser.id
+          } catch (e) {
+            console.error('Error upserting IRC nickname user:', e)
+          }
+        }
+
         const encrypted = SecureIRCProtocol.encryptMessage(sanitized)
 
         await this.prisma.message.create({

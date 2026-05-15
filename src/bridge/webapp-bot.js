@@ -183,9 +183,10 @@ client.on('message', async (event) => {
       }
       recentForwards.delete(key)
     }
-    // Solo messaggi realmente nuovi da IRC esterno vengono notificati e salvati nel DB
-    await notifyWebappFromIRC({ channel: target, from: nick, message });
-    console.log(`[BOT] Messaggio IRC da ${nick} su ${target} inoltrato alla webapp.`);
+    // I messaggi nati su IRC sono gia' persistiti dall'IRC server.
+    // La webapp li vedra' tramite polling su /api/socketio -> get-messages.
+    // Evitiamo quindi un secondo salvataggio via bot -> webapp, che produrrebbe duplicati.
+    console.log(`[BOT] Messaggio IRC da ${nick} su ${target} gia' persistito dall'IRC server, skip webapp notify.`);
   }
 });
 
