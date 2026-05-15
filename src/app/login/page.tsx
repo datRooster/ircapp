@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { signIn } from 'next-auth/react'
 import { useRouter } from 'next/navigation'
+import { useIframeMessenger } from '@/hooks/useIframeMessenger'
 import { 
   FaGithub, 
   FaEye, 
@@ -20,6 +21,7 @@ export default function LoginPage() {
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState('')
   const router = useRouter()
+  const { sendMessage, isInIframe } = useIframeMessenger()
 
   const handleOAuthSignIn = async (provider: string) => {
     setIsLoading(true)
@@ -56,6 +58,13 @@ export default function LoginPage() {
         if (result?.error) {
           setError('Credenziali non valide')
         } else {
+          // Notifica il parent se in iframe
+          if (isInIframe) {
+            sendMessage('AUTH_STATUS', { 
+              authenticated: true, 
+              user: { username } 
+            })
+          }
           router.push('/')
         }
       } else {
@@ -74,6 +83,13 @@ export default function LoginPage() {
           })
           
           if (!result?.error) {
+            // Notifica il parent se in iframe
+            if (isInIframe) {
+              sendMessage('AUTH_STATUS', { 
+                authenticated: true, 
+                user: { username } 
+              })
+            }
             router.push('/')
           }
         } else {
