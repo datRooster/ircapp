@@ -168,6 +168,61 @@ Webapp (Next.js) → API Routes → Bridge Bot → IRC Server ⇄ Client IRC Est
 
 ## 🌍 Deployment Produzione
 
+### Railway Service Matrix
+
+Questo progetto in produzione e diviso in **tre servizi Railway distinti**:
+
+- `web`: Next.js + NextAuth + API routes + Prisma migrations/seed
+- `irc`: server IRC TCP su porta `6667`
+- `bot`: bridge HTTP che inoltra i messaggi tra webapp e server IRC
+
+Ogni servizio deve avere `APP_ROLE` corretto:
+
+```env
+web -> APP_ROLE=web
+irc -> APP_ROLE=irc
+bot -> APP_ROLE=bot
+```
+
+Variabili minime per servizio:
+
+```env
+# web
+DATABASE_URL=postgresql://...
+APP_ROLE=web
+NEXTAUTH_SECRET=...
+NEXTAUTH_URL=https://your-web-service.up.railway.app
+BOT_BRIDGE_URL=https://your-bot-service.up.railway.app
+WEBAPP_ENC_KEY=...
+IRC_ENCRYPTION_KEY=...
+ADMIN_USERNAME=admin
+ADMIN_PASSWORD=...
+ADMIN_EMAIL=...
+
+# irc
+DATABASE_URL=postgresql://...
+APP_ROLE=irc
+IRC_PORT=6667
+IRC_HOSTNAME=irc.your-domain.com
+WEBAPP_ENC_KEY=...
+IRC_ENCRYPTION_KEY=...
+
+# bot
+DATABASE_URL=postgresql://...
+APP_ROLE=bot
+WEBAPP_HOST=https://your-web-service.up.railway.app
+IRC_SERVER_HOST=your-irc-service-host
+IRC_SERVER_PORT=6667
+WEBAPP_ENC_KEY=...
+IRC_ENCRYPTION_KEY=...
+```
+
+Note importanti:
+
+- `web` gira dentro un `iframe` sul portfolio, quindi in produzione serve HTTPS reale e cookie compatibili cross-site.
+- `BOT_BRIDGE_URL`, `WEBAPP_HOST` e `IRC_SERVER_HOST` non possono restare su `localhost` fuori dallo sviluppo locale.
+- Se copi un vecchio `DATABASE_URL` da un altro database Railway, registrazione e login romperanno con errori Prisma di autenticazione.
+
 ### Webapp → Vercel
 
 ```bash

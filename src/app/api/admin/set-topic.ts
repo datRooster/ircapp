@@ -1,10 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 
+const botBridgeBaseUrl = (process.env.BOT_BRIDGE_URL || 'http://localhost:4000').replace(/\/$/, '')
+
 export async function POST(req: NextRequest) {
   try {
     const { channel, topic } = await req.json();
     // Chiamata HTTP al bot webapp per impostare il topic
-    const res = await fetch('http://localhost:4000/set-topic', {
+    const res = await fetch(`${botBridgeBaseUrl}/set-topic`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ channel, topic })

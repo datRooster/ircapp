@@ -16,13 +16,13 @@ const { PrismaClient } = require('@prisma/client');
 
 const prisma = new PrismaClient();
 
-const IRC_SERVER = 'localhost';
-const IRC_PORT = 6667;
+const IRC_SERVER = process.env.IRC_SERVER_HOST || 'localhost';
+const IRC_PORT = parseInt(process.env.IRC_SERVER_PORT || '6667', 10);
 const IRC_NICK = 'webapp';
 const IRC_USER = 'webapp';
 const IRC_REALNAME = 'WebApp Bridge Bot';
 
-const HTTP_PORT = 4000; // Porta su cui il bot ascolta richieste dalla webapp
+const HTTP_PORT = parseInt(process.env.BOT_HTTP_PORT || process.env.PORT || '4000', 10);
 
 // 1. Avvia il client IRC
 

@@ -1,6 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { prisma } from '@/lib/prisma'
 
+const botBridgeBaseUrl = (process.env.BOT_BRIDGE_URL || 'http://localhost:4000').replace(/\/$/, '')
+
 export async function GET() {
   return NextResponse.json({ status: 'Socket.io mock with Prisma ready' })
 }
@@ -20,7 +22,7 @@ export async function POST(req: NextRequest) {
       // 1. Inoltra al bot HTTP bridge
       try {
         // Inoltra al bot HTTP bridge con timeout. Se il bridge non risponde, fall back a salvarlo localmente
-        const bridgeUrl = 'http://localhost:4000/send-irc'
+        const bridgeUrl = `${botBridgeBaseUrl}/send-irc`
         const controller = new AbortController()
         const timeoutMs = 5000
         const timeout = setTimeout(() => controller.abort(), timeoutMs)
@@ -109,7 +111,7 @@ export async function POST(req: NextRequest) {
             // Start a background retry to notify the bot bridge in case it was temporarily unreachable
             ;(async function backgroundNotifyBridge(retry = 0) {
               try {
-                const bridgeUrl = 'http://localhost:4000/send-irc'
+                const bridgeUrl = `${botBridgeBaseUrl}/send-irc`
                 const body = JSON.stringify({
                   channel: channelId.startsWith('#') ? channelId : `#${channelId}`,
                   message: encryptedObj.encryptedContent,

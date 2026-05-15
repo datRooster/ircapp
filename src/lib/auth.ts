@@ -4,8 +4,14 @@ import GitHub from 'next-auth/providers/github'
 import { prisma } from './prisma'
 import bcrypt from 'bcryptjs'
 
+const isProduction = process.env.NODE_ENV === 'production'
+const cookieSameSite = isProduction ? 'none' : 'lax'
+const secureCookiePrefix = isProduction ? '__Secure-' : ''
+const csrfCookiePrefix = isProduction ? '__Host-' : ''
+
 export const authOptions: NextAuthConfig = {
   trustHost: true, // Allow Railway dynamic URLs
+  useSecureCookies: isProduction,
   providers: [
     // OAuth Provider - Solo GitHub
     GitHub({
@@ -98,6 +104,61 @@ export const authOptions: NextAuthConfig = {
   ],
   session: {
     strategy: 'jwt'
+  },
+  cookies: {
+    sessionToken: {
+      name: `${secureCookiePrefix}authjs.session-token`,
+      options: {
+        httpOnly: true,
+        sameSite: cookieSameSite,
+        path: '/',
+        secure: isProduction,
+      },
+    },
+    callbackUrl: {
+      name: `${secureCookiePrefix}authjs.callback-url`,
+      options: {
+        sameSite: cookieSameSite,
+        path: '/',
+        secure: isProduction,
+      },
+    },
+    csrfToken: {
+      name: `${csrfCookiePrefix}authjs.csrf-token`,
+      options: {
+        httpOnly: true,
+        sameSite: cookieSameSite,
+        path: '/',
+        secure: isProduction,
+      },
+    },
+    pkceCodeVerifier: {
+      name: `${secureCookiePrefix}authjs.pkce.code_verifier`,
+      options: {
+        httpOnly: true,
+        sameSite: cookieSameSite,
+        path: '/',
+        secure: isProduction,
+      },
+    },
+    state: {
+      name: `${secureCookiePrefix}authjs.state`,
+      options: {
+        httpOnly: true,
+        sameSite: cookieSameSite,
+        path: '/',
+        secure: isProduction,
+      },
+    },
+    nonce: {
+      name: `${secureCookiePrefix}authjs.nonce`,
+      options: {
+        httpOnly: true,
+        sameSite: cookieSameSite,
+        path: '/',
+        secure: isProduction,
+      },
+    },
   },
   pages: {
     signIn: '/login'

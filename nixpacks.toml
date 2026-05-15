@@ -5,7 +5,7 @@ nixPkgs = ["nodejs_20", "openssl"]
 cmds = ["npm ci"]
 
 [phases.build]
-cmds = ["npm install", "npx prisma migrate deploy", "npx prisma generate", "npm run db:seed:core", "npm run build"]
+cmds = ["bash ./scripts/railway-build.sh"]
 
 [start]
-cmd = "npm run start"
+cmd = "bash ./scripts/railway-start.sh"

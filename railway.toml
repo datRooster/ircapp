@@ -1,11 +1,11 @@
 [build]
 builder = "NIXPACKS"
-buildCommand = "npm install && npx prisma migrate deploy && npx prisma generate && npm run db:seed:core && npm run build"
+buildCommand = "bash ./scripts/railway-build.sh"
 
 [deploy]
 # Usa solo il processo web (Next.js)
 # Il processo IRC va su un servizio separato
-startCommand = "npm run start"
+startCommand = "bash ./scripts/railway-start.sh"
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 10
 
