@@ -6,6 +6,7 @@ buildCommand = "bash ./scripts/railway-build.sh"
 # Usa solo il processo web (Next.js)
 # Il processo IRC va su un servizio separato
 startCommand = "bash ./scripts/railway-start.sh"
+preDeployCommand = "bash ./scripts/railway-predeploy.sh"
 restartPolicyType = "ON_FAILURE"
 restartPolicyMaxRetries = 10
 

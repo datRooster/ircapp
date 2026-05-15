@@ -172,7 +172,7 @@ Webapp (Next.js) → API Routes → Bridge Bot → IRC Server ⇄ Client IRC Est
 
 Questo progetto in produzione e diviso in **tre servizi Railway distinti**:
 
-- `web`: Next.js + NextAuth + API routes + Prisma migrations/seed
+- `web`: Next.js + NextAuth + API routes + Prisma migrations/seed in pre-deploy
 - `irc`: server IRC TCP su porta `6667`
 - `bot`: bridge HTTP che inoltra i messaggi tra webapp e server IRC
 
@@ -222,6 +222,7 @@ Note importanti:
 - `web` gira dentro un `iframe` sul portfolio, quindi in produzione serve HTTPS reale e cookie compatibili cross-site.
 - `BOT_BRIDGE_URL`, `WEBAPP_HOST` e `IRC_SERVER_HOST` non possono restare su `localhost` fuori dallo sviluppo locale.
 - Se copi un vecchio `DATABASE_URL` da un altro database Railway, registrazione e login romperanno con errori Prisma di autenticazione.
+- Le migrazioni Prisma e il seed core partono nel `pre-deploy` del servizio `web`, non nella fase di build dell'immagine.
 
 ### Webapp → Vercel
 
