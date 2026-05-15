@@ -73,7 +73,7 @@ export default function ChannelSidebar({
           <div className="space-y-0.5">
             {channels.map((channel) => {
               const isActive = currentChannel === channel.id
-              const isLobby = channel.id === 'lobby'
+              const isLobby = channel.id === 'lobby' || channel.name === 'lobby'
               
               return (
                 <button

@@ -35,7 +35,8 @@ export default function Home() {
         const guestChan = data.channels.find((c:any) => c.name === 'guest')
         setCurrentChannel(guestChan?.id || data.channels[0].id)
       } else if (session?.user && data?.channels?.length) {
-        setCurrentChannel('lobby')
+        const lobbyChan = data.channels.find((c: any) => c.id === 'lobby' || c.name === 'lobby')
+        setCurrentChannel(lobbyChan?.id || data.channels[0].id)
       }
     } catch (error) {
       console.error('Error loading channels:', error)

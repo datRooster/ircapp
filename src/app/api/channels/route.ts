@@ -75,7 +75,7 @@ export async function GET() {
     const transformedChannels = channels.map(channel => {
       let allowedRoles: string[] = []
       // Forza la lobby come solo admin scrivibile
-      if (channel.name === '#lobby') {
+      if (channel.id === 'lobby' || channel.name === 'lobby') {
         allowedRoles = ['admin']
       } else if (channel.requiredRole === 'admin') allowedRoles = ['admin']
       else if (channel.requiredRole === 'moderator') allowedRoles = ['admin', 'moderator']

@@ -1,6 +1,6 @@
 [build]
 builder = "NIXPACKS"
-buildCommand = "npm install && npx prisma generate && npm run build"
+buildCommand = "npm install && npx prisma migrate deploy && npx prisma generate && npm run db:seed:core && npm run build"
 
 [deploy]
 # Usa solo il processo web (Next.js)

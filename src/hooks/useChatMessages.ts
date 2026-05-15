@@ -25,7 +25,7 @@ export function useChatMessages({ channel, currentUserId }: UseChatMessagesOptio
     
     try {
       // Lobby ha messaggi speciali
-      if (channel.id === 'lobby') {
+      if (channel.id === 'lobby' || channel.name === 'lobby') {
         const { createLobbyMessages } = await import('../lib/lobby-messages')
         const lobbyMessages = createLobbyMessages(channel)
         setMessages(lobbyMessages)

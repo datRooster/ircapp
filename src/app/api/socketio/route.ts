@@ -199,7 +199,10 @@ export async function POST(req: NextRequest) {
       // Expected fields from bot: channelId, content (encrypted hex), iv (hex), keyId/tag (hex), from, realFrom, encrypted
       try {
         const { SecureIRCProtocol } = require('@/lib/secure-irc.server')
-        const channel = data.channelId || data.channel || ''
+        const channelInput = data.channelId || data.channel || ''
+        const normalizedChannel = typeof channelInput === 'string'
+          ? channelInput.replace(/^#/, '').trim().toLowerCase()
+          : ''
         const enc = !!data.encrypted
         let plaintext = data.content
         if (enc && data.iv && data.keyId) {
@@ -209,6 +212,31 @@ export async function POST(req: NextRequest) {
             console.error('Errore decifratura irc-message:', e)
             return NextResponse.json({ error: 'Decrypt failed' }, { status: 500 })
           }
+        }
+
+        let dbChannel = await prisma.channel.findFirst({
+          where: {
+            OR: [
+              { id: normalizedChannel },
+              { name: normalizedChannel }
+            ]
+          },
+          select: { id: true, name: true }
+        })
+
+        if (!dbChannel) {
+          dbChannel = await prisma.channel.create({
+            data: {
+              id: normalizedChannel || undefined,
+              name: normalizedChannel || 'general',
+              description: `Auto-created channel for #${normalizedChannel || 'general'}`,
+              category: 'GENERAL',
+              requiredRole: 'user',
+              isPrivate: false,
+              createdBy: 'system'
+            },
+            select: { id: true, name: true }
+          })
         }
 
         // Try to find a matching user by realFrom (username)
@@ -239,7 +267,7 @@ export async function POST(req: NextRequest) {
             keyId: data.keyId || null,
             encrypted: enc,
             userId,
-            channelId: channel,
+            channelId: dbChannel.id,
             type: 'MESSAGE'
           },
           include: {
