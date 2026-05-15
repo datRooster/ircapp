@@ -15,6 +15,8 @@ export class IRCClient extends EventEmitter {
   public registered: boolean = false
   public userId?: string
   public roles: string[] = ['user']
+  public pendingPassword?: string
+  public authenticatedVia: 'none' | 'pass' = 'none'
   
   // Connection info
   public connectedAt: Date

@@ -1,4 +1,5 @@
 import * as net from 'net'
+import * as tls from 'tls'
 import { EventEmitter } from 'events'
 import { IRCClient } from './irc-client'
 import { IRCMessage } from './irc-message'
@@ -7,22 +8,24 @@ import { UserManager } from './user-manager'
 import { PrismaClient } from '@prisma/client'
 
 export class IRCServer extends EventEmitter {
-  private server: net.Server
+  private server: net.Server | tls.Server
   private clients: Map<string, IRCClient> = new Map()
   private channels: ChannelManager
   private users: UserManager
   private prisma: PrismaClient
   private port: number
   private hostname: string
+  private tlsEnabled: boolean
 
-  constructor(port: number = 6667, hostname: string = 'localhost') {
+  constructor(port: number = 6667, hostname: string = 'localhost', tlsOptions?: tls.TlsOptions | null) {
     super()
     this.port = port
     this.hostname = hostname
     this.prisma = new PrismaClient()
     this.channels = new ChannelManager(this.prisma)
     this.users = new UserManager(this.prisma)
-    this.server = net.createServer()
+    this.tlsEnabled = !!tlsOptions
+    this.server = tlsOptions ? tls.createServer(tlsOptions) : net.createServer()
     
     this.setupServer()
   }
@@ -63,6 +66,14 @@ export class IRCServer extends EventEmitter {
           
         case 'USER':
           await this.handleUser(client, params)
+          break
+
+        case 'PASS':
+          this.handlePass(client, params[0])
+          break
+
+        case 'CAP':
+          this.handleCap(client, params)
           break
           
         case 'JOIN':
@@ -122,6 +133,39 @@ export class IRCServer extends EventEmitter {
     }
   }
 
+  private handlePass(client: IRCClient, password?: string) {
+    if (client.registered) {
+      client.sendNumeric(462, ':You may not reregister')
+      return
+    }
+
+    if (!password) {
+      client.sendNumeric(461, 'PASS :Not enough parameters')
+      return
+    }
+
+    client.pendingPassword = password.replace(/^:/, '')
+    client.authenticatedVia = 'pass'
+  }
+
+  private handleCap(client: IRCClient, params: string[]) {
+    const subcommand = (params[0] || '').toUpperCase()
+
+    switch (subcommand) {
+      case 'LS':
+        client.send('CAP * LS :')
+        break
+      case 'END':
+        break
+      case 'REQ':
+        client.send(`CAP * NAK :${params.slice(2).join(' ').replace(/^:/, '')}`)
+        break
+      default:
+        client.send('CAP * LS :')
+        break
+    }
+  }
+
   // Gestione comandi IRC
   private async handleNick(client: IRCClient, nickname: string) {
     if (!nickname) {
@@ -177,19 +221,63 @@ export class IRCServer extends EventEmitter {
   private async completeRegistration(client: IRCClient) {
     // Verifica autenticazione con database
     try {
-      const user = await this.prisma.user.findUnique({
-        where: { username: client.nickname }
-      })
+      const nickname = client.nickname
+      if (!nickname) {
+        client.sendNumeric(431, ':No nickname given')
+        return
+      }
 
-      if (user) {
-        client.userId = user.id
-        client.roles = user.roles
+      const authResult = await this.users.authenticateUser(nickname, client.pendingPassword)
+
+      if (authResult.status === 'missing-password') {
+        client.sendNumeric(464, `${nickname} :Password required for this registered nickname`)
+        client.send('ERROR :Authentication required for registered nickname')
+        client.disconnect()
+        return
+      }
+
+      if (authResult.status === 'invalid-password') {
+        client.sendNumeric(464, `${nickname} :Password incorrect`)
+        client.send('ERROR :Authentication failed')
+        client.disconnect()
+        return
+      }
+
+      if (authResult.status === 'ok') {
+        client.userId = authResult.user.id
+        client.roles = authResult.user.roles
+        await this.users.updateUserLastSeen(authResult.user.id)
+      }
+
+      if (authResult.status === 'guest') {
+        const placeholderUser = await this.prisma.user.upsert({
+          where: { username: nickname },
+          update: {
+            name: nickname,
+            isOnline: true,
+            lastSeen: new Date()
+          },
+          create: {
+            username: nickname,
+            name: nickname,
+            password: null,
+            isOnline: true,
+            roles: ['user']
+          }
+        })
+
+        client.userId = placeholderUser.id
+        client.roles = placeholderUser.roles
       }
     } catch (error) {
       console.error('Database auth error:', error)
+      client.sendNumeric(500, ':Authentication backend error')
+      client.disconnect()
+      return
     }
 
     client.registered = true
+    client.pendingPassword = undefined
     this.sendWelcome(client)
     
     // Auto-join a #lobby
@@ -473,6 +561,7 @@ export class IRCServer extends EventEmitter {
       // Ascolta su tutte le interfacce (0.0.0.0) per accesso esterno
       this.server.listen(this.port, '0.0.0.0', () => {
         console.log(`🚀 IRC Server listening on port ${this.port}`)
+        console.log(`🔐 TLS ${this.tlsEnabled ? 'enabled' : 'disabled'}`)
         console.log(`📡 Local access: /server localhost ${this.port}`)
         console.log(`🌐 External access: /server <your-ip> ${this.port}`)
         console.log(`🔒 Make sure port ${this.port} is open in your firewall`)

@@ -2,10 +2,13 @@
 
 import { IRCServer } from './irc-server'
 import * as os from 'os'
+import * as fs from 'fs'
+import * as tls from 'tls'
 
 // IRC usa sempre IRC_PORT, ignora la variabile PORT di Railway
 const PORT = parseInt(process.env.IRC_PORT || '6667')
 const HOSTNAME = process.env.IRC_HOSTNAME || 'irc.ircapp.community'
+const TLS_ENABLED = process.env.IRC_TLS_ENABLED === 'true'
 
 // Funzione per ottenere IP locale
 function getLocalIPs(): string[] {
@@ -27,10 +30,66 @@ function getLocalIPs(): string[] {
   return ips
 }
 
+function readPemFromEnvOrFile(
+  directEnv: string | undefined,
+  base64Env: string | undefined,
+  filePathEnv: string | undefined
+): string | undefined {
+  if (directEnv) {
+    return directEnv.replace(/\\n/g, '\n')
+  }
+
+  if (base64Env) {
+    return Buffer.from(base64Env, 'base64').toString('utf8')
+  }
+
+  if (filePathEnv) {
+    return fs.readFileSync(filePathEnv, 'utf8')
+  }
+
+  return undefined
+}
+
+function loadTlsOptions(): tls.TlsOptions | null {
+  if (!TLS_ENABLED) {
+    return null
+  }
+
+  const key = readPemFromEnvOrFile(
+    process.env.IRC_TLS_KEY,
+    process.env.IRC_TLS_KEY_BASE64,
+    process.env.IRC_TLS_KEY_PATH
+  )
+
+  const cert = readPemFromEnvOrFile(
+    process.env.IRC_TLS_CERT,
+    process.env.IRC_TLS_CERT_BASE64,
+    process.env.IRC_TLS_CERT_PATH
+  )
+
+  const ca = readPemFromEnvOrFile(
+    process.env.IRC_TLS_CA,
+    process.env.IRC_TLS_CA_BASE64,
+    process.env.IRC_TLS_CA_PATH
+  )
+
+  if (!key || !cert) {
+    throw new Error('IRC_TLS_ENABLED=true ma mancano certificato o chiave privata')
+  }
+
+  return {
+    key,
+    cert,
+    ca,
+    minVersion: 'TLSv1.2'
+  }
+}
+
 async function startIRCServer() {
   console.log('🚀 Starting IRC Server...')
-  
-  const server = new IRCServer(PORT, HOSTNAME)
+
+  const tlsOptions = loadTlsOptions()
+  const server = new IRCServer(PORT, HOSTNAME, tlsOptions)
   
   // Handle graceful shutdown
   process.on('SIGINT', async () => {
@@ -52,15 +111,16 @@ async function startIRCServer() {
     
     console.log(`🎉 IRC Server started successfully!`)
     console.log(`📡 Port: ${PORT}`)
+    console.log(`🔐 TLS: ${TLS_ENABLED ? 'enabled' : 'disabled'}`)
     console.log('')
     console.log('🔌 CONNECTION OPTIONS:')
-    console.log(`   Local:    /server localhost ${PORT}`)
-    console.log(`   Local:    /server 127.0.0.1 ${PORT}`)
+    console.log(`   Local:    /server localhost ${PORT}${TLS_ENABLED ? ' (TLS)' : ''}`)
+    console.log(`   Local:    /server 127.0.0.1 ${PORT}${TLS_ENABLED ? ' (TLS)' : ''}`)
     
     if (localIPs.length > 0) {
       console.log('   Network:')
       localIPs.forEach(ip => {
-        console.log(`             /server ${ip} ${PORT}`)
+        console.log(`             /server ${ip} ${PORT}${TLS_ENABLED ? ' (TLS)' : ''}`)
       })
     }
     

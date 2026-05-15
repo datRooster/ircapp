@@ -192,7 +192,7 @@ DATABASE_URL=postgresql://...
 APP_ROLE=web
 NEXTAUTH_SECRET=...
 NEXTAUTH_URL=https://your-web-service.up.railway.app
-BOT_BRIDGE_URL=https://your-bot-service.up.railway.app
+BOT_BRIDGE_URL=http://bot.railway.internal:8080
 WEBAPP_ENC_KEY=...
 IRC_ENCRYPTION_KEY=...
 ADMIN_USERNAME=admin
@@ -206,6 +206,9 @@ IRC_PORT=6667
 IRC_HOSTNAME=irc.your-domain.com
 WEBAPP_ENC_KEY=...
 IRC_ENCRYPTION_KEY=...
+IRC_TLS_ENABLED=false
+# IRC_TLS_CERT=...
+# IRC_TLS_KEY=...
 
 # bot
 DATABASE_URL=postgresql://...
@@ -221,8 +224,37 @@ Note importanti:
 
 - `web` gira dentro un `iframe` sul portfolio, quindi in produzione serve HTTPS reale e cookie compatibili cross-site.
 - `BOT_BRIDGE_URL`, `WEBAPP_HOST` e `IRC_SERVER_HOST` non possono restare su `localhost` fuori dallo sviluppo locale.
+- Dentro Railway preferisci i domini privati (`*.railway.internal`) per il traffico tra `web`, `bot` e `irc`.
 - Se copi un vecchio `DATABASE_URL` da un altro database Railway, registrazione e login romperanno con errori Prisma di autenticazione.
 - Le migrazioni Prisma e il seed core partono nel `pre-deploy` del servizio `web`, non nella fase di build dell'immagine.
+
+### Autenticazione IRC
+
+Per evitare impersonation, il server IRC ora gestisce `PASS` prima di `NICK/USER`:
+
+- se il nick corrisponde a un account web con password, il client IRC deve inviare la stessa password prima della registrazione
+- se il nick corrisponde solo a un placeholder IRC senza email/password, il collegamento passwordless resta consentito
+- `webapp` e gli utenti di servizio interni continuano a collegarsi senza prompt aggiuntivi
+
+Con Halloy:
+
+1. usa come nickname lo stesso username dell'account web se vuoi un'identita' condivisa
+2. inserisci la password dell'account nel campo server password
+3. appena attiverai TLS, abilita anche `use_tls = true`
+
+### Pulizia Messaggi Legacy
+
+Per rimuovere i vecchi duplicati generati dal bridge IRC -> webapp:
+
+```bash
+npm run db:cleanup:irc-duplicates
+```
+
+Dry-run di default. Per applicare davvero la pulizia:
+
+```bash
+npx tsx scripts/cleanup-legacy-irc-duplicates.ts --apply
+```
 
 ### Webapp → Vercel
 

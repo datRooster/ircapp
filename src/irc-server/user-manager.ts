@@ -1,5 +1,12 @@
 import { PrismaClient } from '@prisma/client'
+import bcrypt from 'bcryptjs'
 import { IRCClient } from './irc-client'
+
+type IRCAuthResult =
+  | { status: 'guest' }
+  | { status: 'ok'; user: { id: string; username: string; password: string | null; roles: string[]; primaryRole: string; isBanned: boolean; bannedUntil: Date | null } }
+  | { status: 'missing-password'; user: { username: string } }
+  | { status: 'invalid-password'; user: { username: string } }
 
 export class UserManager {
   private prisma: PrismaClient
@@ -64,13 +71,14 @@ export class UserManager {
   }
 
   // Database operations
-  async authenticateUser(nickname: string, _password?: string): Promise<any> {
+  async authenticateUser(nickname: string, password?: string): Promise<IRCAuthResult> {
     try {
       const user = await this.prisma.user.findUnique({
         where: { username: nickname },
         select: {
           id: true,
           username: true,
+          email: true,
           password: true,
           roles: true,
           primaryRole: true,
@@ -80,7 +88,7 @@ export class UserManager {
       })
 
       if (!user) {
-        return null // User doesn't exist
+        return { status: 'guest' } // User doesn't exist
       }
 
       if (user.isBanned) {
@@ -92,9 +100,29 @@ export class UserManager {
         }
       }
 
-      // For IRC, we might want to allow passwordless login for registered users
-      // or implement a different auth mechanism
-      return user
+      const hasExternalIdentity = !!user.email
+      const isServiceUser = ['webapp', 'system'].includes(user.username.toLowerCase())
+
+      if (user.password) {
+        if (!password) {
+          return { status: 'missing-password', user: { username: user.username } }
+        }
+
+        const isValid = await bcrypt.compare(password, user.password)
+        if (!isValid) {
+          return { status: 'invalid-password', user: { username: user.username } }
+        }
+
+        return { status: 'ok', user }
+      }
+
+      // Account creati solo come placeholder IRC possono continuare a collegarsi senza PASS.
+      // Per account reali web/OAuth richiediamo invece una credenziale vera per evitare impersonation.
+      if (!hasExternalIdentity || isServiceUser) {
+        return { status: 'ok', user }
+      }
+
+      return { status: 'missing-password', user: { username: user.username } }
 
     } catch (error) {
       console.error('Error authenticating user:', error)

@@ -17,6 +17,7 @@
     "db:migrate": "prisma migrate deploy",
     "db:studio": "prisma studio",
     "db:seed:core": "tsx prisma/seed-guest-help.ts",
+    "db:cleanup:irc-duplicates": "tsx scripts/cleanup-legacy-irc-duplicates.ts",
     "irc:start": "tsx src/irc-server/start-server.ts",
     "irc:dev": "tsx watch src/irc-server/start-server.ts",
     "dev:full": "concurrently \"npm run dev\" \"npm run irc:dev\"",
