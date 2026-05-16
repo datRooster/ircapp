@@ -221,6 +221,8 @@ IRC_SERVER_HOST=your-irc-service-host
 IRC_SERVER_PORT=6667
 IRC_USE_TLS=false
 IRC_TLS_REJECT_UNAUTHORIZED=true
+IRC_DEFAULT_CHANNELS=#lobby,#general,#tech,#guest,#help
+IRC_JOIN_WAIT_MS=1200
 WEBAPP_ENC_KEY=...
 IRC_ENCRYPTION_KEY=...
 BRIDGE_SHARED_SECRET=...
@@ -233,6 +235,8 @@ Note importanti:
 - `BRIDGE_SHARED_SECRET` permette di firmare le chiamate HTTP tra `web` e `bot` e va impostato uguale su entrambi.
 - Dentro Railway preferisci i domini privati (`*.railway.internal`) per il traffico tra `web`, `bot` e `irc`.
 - Se il `bot` parla con un listener IRC TLS, imposta anche `IRC_USE_TLS=true`; con certificati self-signed puoi usare temporaneamente `IRC_TLS_REJECT_UNAUTHORIZED=false`.
+- `IRC_DEFAULT_CHANNELS` fa pre-entrare il bot nei canali seedati per evitare che il primo messaggio web cada in timeout durante il `JOIN`.
+- `IRC_JOIN_WAIT_MS` controlla quanto il bot aspetta l'ack di join prima di inviare comunque il messaggio.
 - Se copi un vecchio `DATABASE_URL` da un altro database Railway, registrazione e login romperanno con errori Prisma di autenticazione.
 - Le migrazioni Prisma e il seed core partono nel `pre-deploy` del servizio `web`, non nella fase di build dell'immagine.
 

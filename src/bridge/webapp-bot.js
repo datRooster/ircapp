@@ -20,6 +20,11 @@ const IRC_SERVER = process.env.IRC_SERVER_HOST || 'localhost';
 const IRC_PORT = parseInt(process.env.IRC_SERVER_PORT || '6667', 10);
 const IRC_USE_TLS = (process.env.IRC_USE_TLS || 'false').toLowerCase() === 'true';
 const IRC_TLS_REJECT_UNAUTHORIZED = (process.env.IRC_TLS_REJECT_UNAUTHORIZED || 'true').toLowerCase() !== 'false';
+const IRC_DEFAULT_CHANNELS = (process.env.IRC_DEFAULT_CHANNELS || '#lobby,#general,#tech,#guest,#help')
+  .split(',')
+  .map((value) => value.trim())
+  .filter(Boolean);
+const IRC_JOIN_WAIT_MS = parseInt(process.env.IRC_JOIN_WAIT_MS || '1200', 10);
 const IRC_NICK = 'webapp';
 const IRC_USER = 'webapp';
 const IRC_REALNAME = 'WebApp Bridge Bot';
@@ -41,6 +46,11 @@ const client = new irc.Client();
 
 let isConnected = false;
 let reconnectTimer = null;
+const joinedChannels = new Set();
+
+function normalizeChannelName(channel) {
+  return String(channel || '').trim().toLowerCase();
+}
 
 function connectToIRC() {
   console.log(
@@ -79,6 +89,7 @@ console.log('[BOT] WEBAPP_ENC_KEY present:', BOT_ENC_AVAILABLE)
 client.on('socket close', () => {
   console.log('[BOT] Socket closed');
   isConnected = false;
+  joinedChannels.clear();
   if (!reconnectTimer) {
     scheduleReconnect();
   }
@@ -91,6 +102,7 @@ client.on('socket connected', () => {
 client.on('close', () => {
   console.log('[BOT] IRC connection closed');
   isConnected = false;
+  joinedChannels.clear();
   if (!reconnectTimer) {
     scheduleReconnect();
   }
@@ -162,10 +174,16 @@ async function notifyWebappFromIRC({ channel, from, message, originalMessageId }
 client.on('registered', () => {
   console.log(`[BOT] Successfully registered on IRC server as ${IRC_NICK}`);
   isConnected = true;
+  joinedChannels.clear();
   // Cancella timer di riconnessione se presente
   if (reconnectTimer) {
     clearTimeout(reconnectTimer);
     reconnectTimer = null;
+  }
+
+  for (const channel of IRC_DEFAULT_CHANNELS) {
+    console.log(`[BOT] Auto-joining default channel ${channel}`);
+    client.join(channel);
   }
 });
 
@@ -329,8 +347,8 @@ app.post('/send-irc', async (req, res) => {
     // ignore
   }
   // Verifica se il bot è nel canale, altrimenti fai JOIN
-  const chanObj = client.channel(ircChannel);
-  const isInChannel = chanObj && chanObj.joined;
+  const normalizedChannel = normalizeChannelName(ircChannel);
+  const isInChannel = joinedChannels.has(normalizedChannel);
   
   if (!isInChannel) {
     console.log(`[BOT] Not in channel ${ircChannel}, joining first...`);
@@ -340,22 +358,25 @@ app.post('/send-irc', async (req, res) => {
     // Usa una Promise per aspettare l'evento JOIN
     await new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
-        reject(new Error('JOIN timeout'));
-      }, 5000);
+        resolve(false);
+      }, IRC_JOIN_WAIT_MS);
       
       const onJoin = (event) => {
         if (event.channel === ircChannel && event.nick === IRC_NICK) {
           clearTimeout(timeout);
           client.off('join', onJoin);
           console.log(`[BOT] Successfully joined ${ircChannel}`);
-          resolve();
+          resolve(true);
         }
       };
       
       client.on('join', onJoin);
+    }).then((joined) => {
+      if (!joined) {
+        console.warn(`[BOT] JOIN wait expired for ${ircChannel}, sending anyway`);
+      }
     }).catch(err => {
       console.error(`[BOT] Failed to join ${ircChannel}:`, err);
-      // Prova comunque a inviare
     });
   }
   
@@ -374,6 +395,9 @@ app.post('/send-irc', async (req, res) => {
 client.on('join', (event) => {
   const { channel, nick } = event;
   console.log(`[BOT] JOIN event: ${nick} joined ${channel}`)
+  if (nick === IRC_NICK) {
+    joinedChannels.add(normalizeChannelName(channel));
+  }
   if (nick === IRC_NICK && pendingMessages.has(channel)) {
     const queue = pendingMessages.get(channel);
     console.log(`[BOT] Processing ${queue.length} queued messages for ${channel}`)
@@ -393,6 +417,13 @@ client.on('join', (event) => {
       }
     }
     pendingMessages.delete(channel);
+  }
+});
+
+client.on('part', (event) => {
+  const { channel, nick } = event;
+  if (nick === IRC_NICK) {
+    joinedChannels.delete(normalizeChannelName(channel));
   }
 });
 
