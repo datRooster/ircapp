@@ -18,6 +18,8 @@ const prisma = new PrismaClient();
 
 const IRC_SERVER = process.env.IRC_SERVER_HOST || 'localhost';
 const IRC_PORT = parseInt(process.env.IRC_SERVER_PORT || '6667', 10);
+const IRC_USE_TLS = (process.env.IRC_USE_TLS || 'false').toLowerCase() === 'true';
+const IRC_TLS_REJECT_UNAUTHORIZED = (process.env.IRC_TLS_REJECT_UNAUTHORIZED || 'true').toLowerCase() !== 'false';
 const IRC_NICK = 'webapp';
 const IRC_USER = 'webapp';
 const IRC_REALNAME = 'WebApp Bridge Bot';
@@ -41,7 +43,10 @@ let isConnected = false;
 let reconnectTimer = null;
 
 function connectToIRC() {
-  console.log(`[BOT] Attempting to connect to IRC server ${IRC_SERVER}:${IRC_PORT} as ${IRC_NICK}`);
+  console.log(
+    `[BOT] Attempting to connect to IRC server ${IRC_SERVER}:${IRC_PORT} as ${IRC_NICK} ` +
+      `(tls=${IRC_USE_TLS}, rejectUnauthorized=${IRC_TLS_REJECT_UNAUTHORIZED})`
+  );
   
   client.connect({
     host: IRC_SERVER,
@@ -49,6 +54,8 @@ function connectToIRC() {
     nick: IRC_NICK,
     username: IRC_USER,
     realname: IRC_REALNAME,
+    tls: IRC_USE_TLS,
+    rejectUnauthorized: IRC_TLS_REJECT_UNAUTHORIZED,
     auto_reconnect: false, // Gestiamo manualmente la riconnessione
   });
 }
