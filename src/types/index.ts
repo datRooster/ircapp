@@ -14,8 +14,17 @@ export interface Channel {
   topic?: string;
   description?: string;
   isPrivate: boolean;
+  inviteOnly?: boolean;
+  isTemporary?: boolean;
+  expiresAt?: Date | string | null;
+  requiredRole?: string;
   isReadOnly: boolean;
   allowedRoles?: string[]; // Ruoli che possono scrivere in canali read-only
+  category?: 'GENERAL' | 'ADMIN' | 'MODERATION' | 'PRIVATE' | 'ARCHIVED' | 'GUEST' | 'HELP';
+  parentId?: string | null;
+  memberCount?: number;
+  messageCount?: number;
+  maxMembers?: number | null;
   users: User[];
   createdAt: Date;
   updatedAt: Date;

@@ -9,16 +9,21 @@ import {
   Edit, 
   Trash2, 
   Archive,
-  Settings
+  Settings,
+  Clock3,
+  KeyRound
 } from 'lucide-react'
 
 interface Channel {
   id: string
   name: string
   description?: string
-  category: 'GENERAL' | 'ADMIN' | 'MODERATION' | 'PRIVATE' | 'ARCHIVED'
+  category: 'GENERAL' | 'ADMIN' | 'MODERATION' | 'PRIVATE' | 'ARCHIVED' | 'GUEST' | 'HELP'
   requiredRole: string
   isPrivate: boolean
+  inviteOnly?: boolean
+  isTemporary?: boolean
+  expiresAt?: string | null
   isArchived: boolean
   parentId?: string
   maxMembers?: number
@@ -49,6 +54,10 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ userRole, onClose }) => {
     category: 'GENERAL' as Channel['category'],
     requiredRole: 'user',
     isPrivate: false,
+    inviteOnly: false,
+    isTemporary: false,
+    expiresAt: '',
+    channelPassword: '',
     parentId: '',
     maxMembers: ''
   })
@@ -99,6 +108,10 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ userRole, onClose }) => {
           category: 'GENERAL',
           requiredRole: 'user',
           isPrivate: false,
+          inviteOnly: false,
+          isTemporary: false,
+          expiresAt: '',
+          channelPassword: '',
           parentId: '',
           maxMembers: ''
         })
@@ -141,6 +154,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ userRole, onClose }) => {
               {channel.category === 'ADMIN' && <Settings className="text-amber-500 w-3.5 h-3.5" />}
               {channel.category === 'MODERATION' && <Shield className="text-blue-500 w-3.5 h-3.5" />}
               {channel.isPrivate && <Shield className="text-red-500 w-3.5 h-3.5" />}
+              {channel.inviteOnly && <KeyRound className="text-sky-500 w-3.5 h-3.5" />}
+              {channel.isTemporary && <Clock3 className="text-cyan-500 w-3.5 h-3.5" />}
               {channel.isArchived && <Archive className="text-gray-400 w-3.5 h-3.5" />}
               <span className="font-medium text-white">#{channel.name}</span>
             </div>
@@ -359,6 +374,8 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ userRole, onClose }) => {
                           <option value="MODERATION">Solo Moderatori</option>
                           {userRole === 'admin' && <option value="ADMIN">Solo Admin</option>}
                           <option value="PRIVATE">Privato</option>
+                          <option value="GUEST">Guest</option>
+                          <option value="HELP">Help</option>
                         </select>
                       </div>
 
@@ -374,7 +391,77 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ userRole, onClose }) => {
                           <option value="user">Utente</option>
                           <option value="moderator">Moderatore</option>
                           {userRole === 'admin' && <option value="admin">Admin</option>}
+                          <option value="guest">Guest</option>
                         </select>
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <label className="flex items-center gap-2 text-sm text-gray-300">
+                          <input
+                            type="checkbox"
+                            checked={newChannel.isPrivate}
+                            onChange={(e) => setNewChannel({...newChannel, isPrivate: e.target.checked})}
+                          />
+                          Canale privato
+                        </label>
+                        <label className="flex items-center gap-2 text-sm text-gray-300">
+                          <input
+                            type="checkbox"
+                            checked={newChannel.inviteOnly}
+                            onChange={(e) => setNewChannel({...newChannel, inviteOnly: e.target.checked})}
+                          />
+                          Solo su invito
+                        </label>
+                        <label className="flex items-center gap-2 text-sm text-gray-300">
+                          <input
+                            type="checkbox"
+                            checked={newChannel.isTemporary}
+                            onChange={(e) => setNewChannel({...newChannel, isTemporary: e.target.checked})}
+                          />
+                          Canale temporaneo
+                        </label>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-2">
+                          Password canale
+                        </label>
+                        <input
+                          type="text"
+                          value={newChannel.channelPassword}
+                          onChange={(e) => setNewChannel({...newChannel, channelPassword: e.target.value})}
+                          className="w-full p-2 bg-gray-700 border border-gray-600 rounded text-white"
+                          placeholder="Lascia vuoto per nessuna password"
+                        />
+                      </div>
+
+                      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                        <div>
+                          <label className="block text-sm font-medium text-gray-300 mb-2">
+                            Scadenza temporanea
+                          </label>
+                          <input
+                            type="datetime-local"
+                            value={newChannel.expiresAt}
+                            onChange={(e) => setNewChannel({...newChannel, expiresAt: e.target.value})}
+                            className="w-full p-2 bg-gray-700 border border-gray-600 rounded text-white"
+                            disabled={!newChannel.isTemporary}
+                          />
+                        </div>
+
+                        <div>
+                          <label className="block text-sm font-medium text-gray-300 mb-2">
+                            Max membri
+                          </label>
+                          <input
+                            type="number"
+                            min="0"
+                            value={newChannel.maxMembers}
+                            onChange={(e) => setNewChannel({...newChannel, maxMembers: e.target.value})}
+                            className="w-full p-2 bg-gray-700 border border-gray-600 rounded text-white"
+                            placeholder="Illimitato"
+                          />
+                        </div>
                       </div>
 
                       <div className="flex space-x-3">
@@ -452,6 +539,65 @@ const AdminPanel: React.FC<AdminPanelProps> = ({ userRole, onClose }) => {
                           className="mr-2"
                         />
                         <span className="text-gray-300">Canale privato</span>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-2">Solo su invito</label>
+                        <input
+                          type="checkbox"
+                          checked={editData.inviteOnly ?? editingChannel.inviteOnly ?? false}
+                          onChange={e => setEditData({...editData, inviteOnly: e.target.checked})}
+                          className="mr-2"
+                        />
+                        <span className="text-gray-300">Richiede invito</span>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-2">Canale temporaneo</label>
+                        <input
+                          type="checkbox"
+                          checked={editData.isTemporary ?? editingChannel.isTemporary ?? false}
+                          onChange={e => setEditData({...editData, isTemporary: e.target.checked})}
+                          className="mr-2"
+                        />
+                        <span className="text-gray-300">Scadenza attiva</span>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-2">Scadenza</label>
+                        <input
+                          type="datetime-local"
+                          value={editData.expiresAt ?? (editingChannel.expiresAt ? new Date(editingChannel.expiresAt).toISOString().slice(0, 16) : '')}
+                          onChange={e => setEditData({...editData, expiresAt: e.target.value})}
+                          className="w-full p-2 bg-gray-700 border border-gray-600 rounded text-white"
+                          disabled={!(editData.isTemporary ?? editingChannel.isTemporary)}
+                        />
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-2">Password canale</label>
+                        <input
+                          type="text"
+                          value={editData.channelPassword ?? ''}
+                          onChange={e => setEditData({...editData, channelPassword: e.target.value, clearChannelPassword: false})}
+                          className="w-full p-2 bg-gray-700 border border-gray-600 rounded text-white"
+                          placeholder="Lascia vuoto per mantenerla invariata"
+                        />
+                        <label className="mt-2 flex items-center gap-2 text-sm text-gray-300">
+                          <input
+                            type="checkbox"
+                            checked={editData.clearChannelPassword ?? false}
+                            onChange={e => setEditData({...editData, clearChannelPassword: e.target.checked, channelPassword: e.target.checked ? '' : editData.channelPassword})}
+                          />
+                          Rimuovi password canale
+                        </label>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-300 mb-2">Max membri</label>
+                        <input
+                          type="number"
+                          min="0"
+                          value={editData.maxMembers ?? editingChannel.maxMembers ?? ''}
+                          onChange={e => setEditData({...editData, maxMembers: e.target.value ? Number(e.target.value) : null})}
+                          className="w-full p-2 bg-gray-700 border border-gray-600 rounded text-white"
+                          placeholder="Illimitato"
+                        />
                       </div>
                       <div className="flex space-x-3">
                         <button type="submit" className="flex-1 bg-blue-600 hover:bg-blue-700 text-white py-2 px-4 rounded">Salva</button>

@@ -78,6 +78,10 @@ model Channel {
   topic        String?
   description  String?
   isPrivate    Boolean         @default(false)
+  inviteOnly   Boolean         @default(false)
+  channelKeyHash String?
+  isTemporary  Boolean         @default(false)
+  expiresAt    DateTime?
   createdAt    DateTime        @default(now())
   updatedAt    DateTime        @updatedAt
   category     ChannelCategory @default(GENERAL)

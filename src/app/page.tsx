@@ -72,6 +72,13 @@ export default function Home() {
     setCurrentChannel(channelId)
   }
 
+  const handleChannelsChanged = async (createdChannelId?: string) => {
+    await loadChannels()
+    if (createdChannelId) {
+      setCurrentChannel(createdChannelId)
+    }
+  }
+
   const handleOpenAdminPanel = () => {
     setShowAdminPanel(true)
   }
@@ -115,6 +122,7 @@ export default function Home() {
         channels={channels}
         currentChannel={currentChannel}
         onChannelSelect={handleChannelSelect}
+        onChannelsChanged={handleChannelsChanged}
         userRole={currentUser.roles.includes('admin') ? 'admin' : currentUser.roles.includes('moderator') ? 'moderator' : isGuest ? 'guest' : 'user'}
         username={currentUser.username}
         onOpenAdminPanel={handleOpenAdminPanel}

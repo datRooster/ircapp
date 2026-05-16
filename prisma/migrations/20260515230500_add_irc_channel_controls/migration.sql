@@ -1,0 +1,5 @@
+ALTER TABLE "channels"
+ADD COLUMN "inviteOnly" BOOLEAN NOT NULL DEFAULT false,
+ADD COLUMN "channelKeyHash" TEXT,
+ADD COLUMN "isTemporary" BOOLEAN NOT NULL DEFAULT false,
+ADD COLUMN "expiresAt" TIMESTAMP(3);

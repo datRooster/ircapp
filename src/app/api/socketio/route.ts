@@ -1,7 +1,51 @@
 import { NextRequest, NextResponse } from 'next/server'
+import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
 
 const botBridgeBaseUrl = (process.env.BOT_BRIDGE_URL || 'http://localhost:4000').replace(/\/$/, '')
+const bridgeSharedSecret = process.env.BRIDGE_SHARED_SECRET || process.env.IRC_ENCRYPTION_KEY || ''
+
+function roleSatisfiesRequirement(roles: string[], requiredRole: string) {
+  const normalizedRoles = roles.map((role) => role.toLowerCase())
+  const requirement = (requiredRole || 'user').toLowerCase()
+
+  switch (requirement) {
+    case 'guest':
+      return true
+    case 'user':
+      return !normalizedRoles.includes('guest')
+    case 'moderator':
+      return normalizedRoles.includes('moderator') || normalizedRoles.includes('admin')
+    case 'admin':
+      return normalizedRoles.includes('admin')
+    default:
+      return true
+  }
+}
+
+async function resolveChannel(channelId: string) {
+  if (!channelId) return null
+
+  return prisma.channel.findFirst({
+    where: {
+      OR: [
+        { id: channelId },
+        { name: channelId.replace(/^#/, '').trim().toLowerCase() }
+      ]
+    },
+    select: {
+      id: true,
+      name: true,
+      category: true,
+      isPrivate: true,
+      inviteOnly: true,
+      channelKeyHash: true,
+      isArchived: true,
+      expiresAt: true,
+      requiredRole: true
+    }
+  })
+}
 
 export async function GET() {
   return NextResponse.json({ status: 'Socket.io mock with Prisma ready' })
@@ -12,11 +56,84 @@ export async function POST(req: NextRequest) {
   try {
     const data = await req.json();
     const { content, channelId, action } = data;
+    const session = await auth()
 
     // Webapp -> bot flow handled below (forward to bot bridge). We don't save plaintext/encrypted message here
 
     // Handle webapp-originated messages (webapp -> bot)
     if (action === 'send-message') {
+      const dbChannel = await resolveChannel(channelId)
+      if (!dbChannel) {
+        return NextResponse.json({ error: 'Channel not found' }, { status: 404 })
+      }
+
+      if (dbChannel.isArchived || (dbChannel.expiresAt && dbChannel.expiresAt <= new Date())) {
+        return NextResponse.json({ error: 'Channel expired or archived' }, { status: 403 })
+      }
+
+      const isGuest = !session?.user
+      let requesterRoles = ['guest']
+      let membership = null
+
+      if (!isGuest) {
+        const dbUser = await prisma.user.findUnique({
+          where: { id: session.user.id },
+          select: { roles: true }
+        })
+
+        if (!dbUser) {
+          return NextResponse.json({ error: 'User not found' }, { status: 404 })
+        }
+
+        requesterRoles = dbUser.roles
+        membership = await prisma.channelMember.findUnique({
+          where: {
+            userId_channelId: {
+              userId: session.user.id,
+              channelId: dbChannel.id
+            }
+          },
+          select: {
+            canRead: true,
+            canWrite: true
+          }
+        })
+      }
+
+      const isPrivileged = requesterRoles.includes('admin') || requesterRoles.includes('moderator')
+      const canRead = isGuest
+        ? ['GUEST', 'HELP'].includes(dbChannel.category)
+        : (
+            roleSatisfiesRequirement(requesterRoles, dbChannel.requiredRole) &&
+            (
+              !dbChannel.isPrivate ||
+              isPrivileged ||
+              !!membership
+            )
+          )
+
+      if (!canRead) {
+        return NextResponse.json({ error: 'Access denied for this channel' }, { status: 403 })
+      }
+
+      const canWrite = isGuest
+        ? ['guest', 'help'].includes(dbChannel.name)
+        : (
+            isPrivileged ||
+            (
+              dbChannel.name !== 'lobby' &&
+              roleSatisfiesRequirement(requesterRoles, dbChannel.requiredRole) &&
+              (
+                !dbChannel.isPrivate && !dbChannel.inviteOnly && !dbChannel.channelKeyHash ||
+                membership?.canWrite
+              )
+            )
+          )
+
+      if (!canWrite) {
+        return NextResponse.json({ error: 'You cannot write to this channel' }, { status: 403 })
+      }
+
       // La webapp non salva più il messaggio nel DB, ma lo inoltra solo al bot bridge
       // (il messaggio verrà salvato solo quando il bot lo notificherà come irc-message)
       // 1. Inoltra al bot HTTP bridge
@@ -30,7 +147,7 @@ export async function POST(req: NextRequest) {
           // Prefer channel name for the bridge; accept channelName from client if present
           const channelForBridge = (data.channelName && typeof data.channelName === 'string')
             ? (data.channelName.startsWith('#') ? data.channelName : `#${data.channelName}`)
-            : (channelId && typeof channelId === 'string' && channelId.startsWith('#') ? channelId : `#${channelId}`)
+            : `#${dbChannel.name}`
 
           // Cifra il messaggio prima di inviarlo al bot
           const { SecureIRCProtocol } = require('@/lib/secure-irc.server')
@@ -49,11 +166,20 @@ export async function POST(req: NextRequest) {
 
           const res = await fetch(bridgeUrl, {
             method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            headers: {
+              'Content-Type': 'application/json',
+              ...(bridgeSharedSecret ? { 'x-irc-bridge-key': bridgeSharedSecret } : {})
+            },
             body: JSON.stringify({
               channel: channelForBridge,
               message: encryptedObj.encryptedContent,
-              from: data.username,
+              from: !isGuest
+                ? (
+                    ((session.user as { username?: string })?.username) ||
+                    session.user?.name ||
+                    data.username
+                  )
+                : (data.username || 'guest'),
               encrypted: true,
               iv: encryptedObj.iv,
               keyId: encryptedObj.tag
@@ -92,8 +218,8 @@ export async function POST(req: NextRequest) {
                 iv: encryptedObj.iv,
                 keyId: encryptedObj.tag,
                 encrypted: true,
-                userId: data.userId || 'anonymous',
-                channelId,
+                userId: !isGuest ? session!.user!.id : (data.userId || 'anonymous'),
+                channelId: dbChannel.id,
                 type: 'MESSAGE'
               },
               include: {
@@ -113,16 +239,30 @@ export async function POST(req: NextRequest) {
               try {
                 const bridgeUrl = `${botBridgeBaseUrl}/send-irc`
                 const body = JSON.stringify({
-                  channel: channelId.startsWith('#') ? channelId : `#${channelId}`,
+                  channel: `#${dbChannel.name}`,
                   message: encryptedObj.encryptedContent,
-                  from: data.username,
+                  from: !isGuest
+                    ? (
+                        ((session?.user as { username?: string })?.username) ||
+                        session?.user?.name ||
+                        data.username
+                      )
+                    : (data.username || 'guest'),
                   encrypted: true,
                   iv: encryptedObj.iv,
                   keyId: encryptedObj.tag
                 })
                 const notifyController = new AbortController()
                 const notifyTimeout = setTimeout(() => notifyController.abort(), 5000)
-                const resNotify = await fetch(bridgeUrl, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body, signal: notifyController.signal })
+                const resNotify = await fetch(bridgeUrl, {
+                  method: 'POST',
+                  headers: {
+                    'Content-Type': 'application/json',
+                    ...(bridgeSharedSecret ? { 'x-irc-bridge-key': bridgeSharedSecret } : {})
+                  },
+                  body,
+                  signal: notifyController.signal
+                })
                 clearTimeout(notifyTimeout)
                 if (!resNotify.ok) throw new Error('Bridge notify failed')
                 console.log('[BRIDGE RETRY] Successfully notified bridge after fallback save')
@@ -152,9 +292,62 @@ export async function POST(req: NextRequest) {
     }
 
     if (action === 'get-messages') {
+      const dbChannel = await resolveChannel(channelId)
+      if (!dbChannel) {
+        return NextResponse.json({ error: 'Channel not found' }, { status: 404 })
+      }
+
+      if (dbChannel.isArchived || (dbChannel.expiresAt && dbChannel.expiresAt <= new Date())) {
+        return NextResponse.json({ error: 'Channel expired or archived' }, { status: 403 })
+      }
+
+      const isGuest = !session?.user
+      let requesterRoles = ['guest']
+      let membership = null
+
+      if (!isGuest) {
+        const dbUser = await prisma.user.findUnique({
+          where: { id: session.user.id },
+          select: { roles: true }
+        })
+
+        if (!dbUser) {
+          return NextResponse.json({ error: 'User not found' }, { status: 404 })
+        }
+
+        requesterRoles = dbUser.roles
+        membership = await prisma.channelMember.findUnique({
+          where: {
+            userId_channelId: {
+              userId: session.user.id,
+              channelId: dbChannel.id
+            }
+          },
+          select: {
+            canRead: true
+          }
+        })
+      }
+
+      const canRead = isGuest
+        ? ['GUEST', 'HELP'].includes(dbChannel.category)
+        : (
+            roleSatisfiesRequirement(requesterRoles, dbChannel.requiredRole) &&
+            (
+              !dbChannel.isPrivate ||
+              requesterRoles.includes('admin') ||
+              requesterRoles.includes('moderator') ||
+              !!membership
+            )
+          )
+
+      if (!canRead) {
+        return NextResponse.json({ error: 'Access denied for this channel' }, { status: 403 })
+      }
+
       // Carica messaggi dal database
       const messages = await prisma.message.findMany({
-        where: { channelId },
+        where: { channelId: dbChannel.id },
         include: {
           user: { select: { id: true, username: true, avatar: true, roles: true } },
           channel: { select: { id: true, name: true } },
@@ -198,6 +391,11 @@ export async function POST(req: NextRequest) {
 
     // Handle messages forwarded from the IRC bot (bot -> webapp)
     if (action === 'irc-message') {
+      const providedBridgeSecret = req.headers.get('x-irc-bridge-key') || ''
+      if (bridgeSharedSecret && providedBridgeSecret !== bridgeSharedSecret) {
+        return NextResponse.json({ error: 'Invalid bridge credentials' }, { status: 403 })
+      }
+
       // Expected fields from bot: channelId, content (encrypted hex), iv (hex), keyId/tag (hex), from, realFrom, encrypted
       try {
         const { SecureIRCProtocol } = require('@/lib/secure-irc.server')

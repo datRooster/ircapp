@@ -23,6 +23,7 @@ const IRC_USER = 'webapp';
 const IRC_REALNAME = 'WebApp Bridge Bot';
 
 const HTTP_PORT = parseInt(process.env.BOT_HTTP_PORT || process.env.PORT || '4000', 10);
+const BRIDGE_SHARED_SECRET = process.env.BRIDGE_SHARED_SECRET || process.env.IRC_ENCRYPTION_KEY || '';
 
 // 1. Avvia il client IRC
 
@@ -128,7 +129,10 @@ async function notifyWebappFromIRC({ channel, from, message, originalMessageId }
       const url = `${webappHost.replace(/\/$/, '')}/api/socketio`;
       await fetch(url, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: {
+          'Content-Type': 'application/json',
+          ...(BRIDGE_SHARED_SECRET ? { 'x-irc-bridge-key': BRIDGE_SHARED_SECRET } : {})
+        },
         body: JSON.stringify({
           action: 'irc-message',
           channelId: channel.replace('#', ''),
@@ -243,6 +247,11 @@ app.use((err, req, res, next) => {
 
 // Endpoint per impostare il topic di un canale via HTTP
 app.post('/set-topic', (req, res) => {
+  const providedBridgeSecret = req.headers['x-irc-bridge-key'] || '';
+  if (BRIDGE_SHARED_SECRET && providedBridgeSecret !== BRIDGE_SHARED_SECRET) {
+    return res.status(403).json({ error: 'Invalid bridge credentials' });
+  }
+
   const { channel, topic } = req.body;
   if (!channel || !topic) {
     return res.status(400).json({ error: 'channel e topic sono obbligatori' });
@@ -259,6 +268,11 @@ const pendingMessages = new Map(); // channel -> array di { ircMsg, res }
 const recentForwards = new Map(); // key -> { originalMessageId, expires }
 
 app.post('/send-irc', async (req, res) => {
+  const providedBridgeSecret = req.headers['x-irc-bridge-key'] || '';
+  if (BRIDGE_SHARED_SECRET && providedBridgeSecret !== BRIDGE_SHARED_SECRET) {
+    return res.status(403).json({ error: 'Invalid bridge credentials' });
+  }
+
   const { channel, message, from, iv, keyId, tag, encrypted } = req.body;
   
   // Debug: log cosa riceve il bot

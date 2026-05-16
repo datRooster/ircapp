@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { auth } from '@/lib/auth'
 import { prisma } from '@/lib/prisma'
+import bcrypt from 'bcryptjs'
 
 export async function GET() {
   try {
@@ -41,6 +42,9 @@ export async function GET() {
             description: true,
             category: true,
             isPrivate: true,
+            inviteOnly: true,
+            isTemporary: true,
+            expiresAt: true,
             isArchived: true
           }
         },
@@ -81,7 +85,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 })
     }
 
-    const { name, description, category, requiredRole, isPrivate, parentId, maxMembers } = await req.json()
+    const { name, description, category, requiredRole, isPrivate, inviteOnly, isTemporary, expiresAt, channelPassword, parentId, maxMembers } = await req.json()
 
     // Validazioni
     if (!name || name.length < 2) {
@@ -121,6 +125,10 @@ export async function POST(req: NextRequest) {
         category,
         requiredRole,
         isPrivate: isPrivate || false,
+        inviteOnly: inviteOnly || false,
+        isTemporary: isTemporary || false,
+        expiresAt: isTemporary && expiresAt ? new Date(expiresAt) : null,
+        channelKeyHash: channelPassword ? await bcrypt.hash(channelPassword, 10) : null,
         parentId: parentId || null,
         maxMembers: maxMembers || null,
         createdBy: user.id
@@ -183,10 +191,6 @@ export async function DELETE(req: NextRequest) {
     const { channelId } = await req.json()
 
     // Non permettere eliminazione del lobby
-    if (channelId === 'lobby') {
-      return NextResponse.json({ error: 'Non è possibile eliminare il canale lobby' }, { status: 400 })
-    }
-
     // Controlla se il canale esiste
     const channel = await prisma.channel.findUnique({
       where: { id: channelId },
@@ -197,6 +201,10 @@ export async function DELETE(req: NextRequest) {
 
     if (!channel) {
       return NextResponse.json({ error: 'Canale non trovato' }, { status: 404 })
+    }
+
+    if (channel.name === 'lobby') {
+      return NextResponse.json({ error: 'Non è possibile eliminare il canale lobby' }, { status: 400 })
     }
 
     // Se ha sottocanali, spostali al livello superiore o eliminali
@@ -232,7 +240,7 @@ export async function PATCH(req: NextRequest) {
     if (!user || !user.roles.some(role => ['admin', 'moderator'].includes(role))) {
       return NextResponse.json({ error: 'Insufficient permissions' }, { status: 403 })
     }
-    const { channelId, description, category, requiredRole, isPrivate, parentId, maxMembers } = await req.json()
+    const { channelId, description, category, requiredRole, isPrivate, inviteOnly, isTemporary, expiresAt, channelPassword, clearChannelPassword, parentId, maxMembers } = await req.json()
     // Solo admin può modificare canali ADMIN
     if (category === 'ADMIN' && !user.roles.includes('admin')) {
       return NextResponse.json({ error: 'Solo gli admin possono modificare canali ADMIN' }, { status: 403 })
@@ -245,6 +253,10 @@ export async function PATCH(req: NextRequest) {
         category,
         requiredRole,
         isPrivate,
+        inviteOnly,
+        isTemporary,
+        expiresAt: isTemporary && expiresAt ? new Date(expiresAt) : null,
+        channelKeyHash: clearChannelPassword ? null : (channelPassword ? await bcrypt.hash(channelPassword, 10) : undefined),
         parentId: parentId || null,
         maxMembers: maxMembers || null
       }

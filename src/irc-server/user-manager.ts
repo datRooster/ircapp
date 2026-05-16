@@ -144,6 +144,206 @@ export class UserManager {
     }
   }
 
+  async registerNickname(nickname: string, password: string, email?: string | null) {
+    const normalizedNickname = nickname.trim()
+    const normalizedEmail = email?.trim() || null
+
+    if (normalizedNickname.length < 3) {
+      throw new Error('Username deve essere di almeno 3 caratteri')
+    }
+
+    if (password.length < 6) {
+      throw new Error('Password deve essere di almeno 6 caratteri')
+    }
+
+    const existingUser = await this.prisma.user.findUnique({
+      where: { username: normalizedNickname },
+      select: {
+        id: true,
+        username: true,
+        email: true,
+        password: true,
+        roles: true,
+        primaryRole: true
+      }
+    })
+
+    if (existingUser?.password) {
+      throw new Error('Questo nickname è già registrato')
+    }
+
+    if (normalizedEmail) {
+      const emailOwner = await this.prisma.user.findUnique({
+        where: { email: normalizedEmail },
+        select: { id: true }
+      })
+
+      if (emailOwner && emailOwner.id !== existingUser?.id) {
+        throw new Error('Questa email è già associata a un altro account')
+      }
+    }
+
+    const hashedPassword = await bcrypt.hash(password, 10)
+    const nextRoles = existingUser
+      ? Array.from(new Set([...existingUser.roles.filter((role) => role !== 'guest'), 'user']))
+      : ['user']
+    const nextPrimaryRole = nextRoles.includes('admin')
+      ? 'ADMIN'
+      : nextRoles.includes('moderator')
+        ? 'MODERATOR'
+        : 'USER'
+
+    const user = existingUser
+      ? await this.prisma.user.update({
+          where: { id: existingUser.id },
+          data: {
+            password: hashedPassword,
+            email: normalizedEmail,
+            name: normalizedNickname,
+            roles: nextRoles,
+            primaryRole: nextPrimaryRole
+          },
+          select: {
+            id: true,
+            username: true,
+            email: true,
+            roles: true,
+            primaryRole: true
+          }
+        })
+      : await this.prisma.user.create({
+          data: {
+            username: normalizedNickname,
+            email: normalizedEmail,
+            password: hashedPassword,
+            name: normalizedNickname,
+            roles: nextRoles,
+            primaryRole: nextPrimaryRole
+          },
+          select: {
+            id: true,
+            username: true,
+            email: true,
+            roles: true,
+            primaryRole: true
+          }
+        })
+
+    return user
+  }
+
+  async loginUser(username: string, password: string) {
+    const authResult = await this.authenticateUser(username, password)
+
+    if (authResult.status === 'missing-password') {
+      throw new Error('Password richiesta per questo account')
+    }
+
+    if (authResult.status === 'invalid-password') {
+      throw new Error('Password non valida')
+    }
+
+    if (authResult.status === 'guest') {
+      throw new Error('Account non trovato')
+    }
+
+    await this.updateUserLastSeen(authResult.user.id)
+    return authResult.user
+  }
+
+  async getOrCreatePlaceholderUser(nickname: string) {
+    const existingUser = await this.prisma.user.findUnique({
+      where: { username: nickname },
+      select: {
+        id: true,
+        email: true,
+        password: true,
+        roles: true,
+        primaryRole: true
+      }
+    })
+
+    if (existingUser) {
+      const isGuestPlaceholder =
+        !existingUser.email &&
+        !existingUser.password &&
+        !existingUser.roles.some((role) => ['admin', 'moderator'].includes(role))
+
+      return this.prisma.user.update({
+        where: { id: existingUser.id },
+        data: {
+          name: nickname,
+          isOnline: true,
+          lastSeen: new Date(),
+          ...(isGuestPlaceholder
+            ? {
+                roles: existingUser.roles.includes('user') ? existingUser.roles : ['guest'],
+                primaryRole: existingUser.primaryRole || 'USER'
+              }
+            : {})
+        }
+      })
+    }
+
+    return this.prisma.user.create({
+      data: {
+        username: nickname,
+        name: nickname,
+        password: null,
+        email: null,
+        isOnline: true,
+        roles: ['guest'],
+        primaryRole: 'USER'
+      }
+    })
+  }
+
+  async syncConfiguredAdmins() {
+    const configuredAdmins = (process.env.IRC_SERVER_ADMINS || '')
+      .split(',')
+      .map((value) => value.trim())
+      .filter(Boolean)
+
+    if (configuredAdmins.length === 0) {
+      return []
+    }
+
+    const synced: string[] = []
+
+    for (const username of configuredAdmins) {
+      const user = await this.prisma.user.upsert({
+        where: { username },
+        update: {},
+        create: {
+          username,
+          name: username,
+          roles: ['admin', 'user'],
+          primaryRole: 'ADMIN'
+        },
+        select: { roles: true }
+      })
+
+      const roles = Array.from(new Set([...user.roles, 'admin', 'user']))
+
+      await this.prisma.user.update({
+        where: { username },
+        data: {
+          roles,
+          primaryRole: 'ADMIN'
+        }
+      })
+
+      const client = this.getClientByNickname(username)
+      if (client) {
+        client.roles = roles
+      }
+
+      synced.push(username)
+    }
+
+    return synced
+  }
+
   async setUserOffline(userId: string) {
     try {
       await this.prisma.user.update({

@@ -195,6 +195,7 @@ NEXTAUTH_URL=https://your-web-service.up.railway.app
 BOT_BRIDGE_URL=http://bot.railway.internal:8080
 WEBAPP_ENC_KEY=...
 IRC_ENCRYPTION_KEY=...
+BRIDGE_SHARED_SECRET=...
 ADMIN_USERNAME=admin
 ADMIN_PASSWORD=...
 ADMIN_EMAIL=...
@@ -204,8 +205,10 @@ DATABASE_URL=postgresql://...
 APP_ROLE=irc
 IRC_PORT=6667
 IRC_HOSTNAME=irc.your-domain.com
+IRC_SERVER_ADMINS=thatRooster
 WEBAPP_ENC_KEY=...
 IRC_ENCRYPTION_KEY=...
+BRIDGE_SHARED_SECRET=...
 IRC_TLS_ENABLED=false
 # IRC_TLS_CERT=...
 # IRC_TLS_KEY=...
@@ -218,12 +221,14 @@ IRC_SERVER_HOST=your-irc-service-host
 IRC_SERVER_PORT=6667
 WEBAPP_ENC_KEY=...
 IRC_ENCRYPTION_KEY=...
+BRIDGE_SHARED_SECRET=...
 ```
 
 Note importanti:
 
 - `web` gira dentro un `iframe` sul portfolio, quindi in produzione serve HTTPS reale e cookie compatibili cross-site.
 - `BOT_BRIDGE_URL`, `WEBAPP_HOST` e `IRC_SERVER_HOST` non possono restare su `localhost` fuori dallo sviluppo locale.
+- `BRIDGE_SHARED_SECRET` permette di firmare le chiamate HTTP tra `web` e `bot` e va impostato uguale su entrambi.
 - Dentro Railway preferisci i domini privati (`*.railway.internal`) per il traffico tra `web`, `bot` e `irc`.
 - Se copi un vecchio `DATABASE_URL` da un altro database Railway, registrazione e login romperanno con errori Prisma di autenticazione.
 - Le migrazioni Prisma e il seed core partono nel `pre-deploy` del servizio `web`, non nella fase di build dell'immagine.
@@ -241,6 +246,47 @@ Con Halloy:
 1. usa come nickname lo stesso username dell'account web se vuoi un'identita' condivisa
 2. inserisci la password dell'account nel campo server password
 3. appena attiverai TLS, abilita anche `use_tls = true`
+4. se usi un certificato self-signed, imposta anche `root_cert_path` nel config di Halloy
+
+### Ruoli e policy canali
+
+- `guest`: puo usare solo i canali guest/help e non puo creare nuovi canali
+- `user`: puo creare solo canali pubblici temporanei
+- `moderator`: puo creare canali privati/pubblici e permanenti, ma non canali riservati agli admin
+- `admin`: puo creare e gestire ogni tipo di canale
+
+### Comandi IRC supportati
+
+```text
+/quote REGISTER <password> [email]
+/quote LOGIN <username> <password>
+/quote IDENTIFY <password>
+/quote MKCHAN #nome [public|private] [temporary|permanent] [guest|user|moderator|admin]
+/quote TEMPCHAN #canale <60|12h|1d>
+/quote PERSIST #canale
+/mode #canale +i
+/mode #canale -i
+/mode #canale +p
+/mode #canale -p
+/mode #canale +k <password>
+/mode #canale -k
+/invite <nick> #canale
+/help
+/help auth
+/help channels
+/help security
+```
+
+### Admin IRC da configurazione
+
+Il server sincronizza gli admin da `IRC_SERVER_ADMINS` all'avvio.  
+Esempio:
+
+```env
+IRC_SERVER_ADMINS=thatRooster,anotherAdmin
+```
+
+Se l'utente esiste gia nel database, verra promosso a `admin` con `primaryRole=ADMIN`.
 
 ### Pulizia Messaggi Legacy
 

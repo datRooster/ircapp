@@ -8,13 +8,16 @@ import {
   Lock, 
   Plus,
   X,
-  Shield
+  Shield,
+  Clock3,
+  KeyRound
 } from 'lucide-react'
 
 interface ChannelSidebarProps {
   channels: Channel[]
   currentChannel: string | null
   onChannelSelect: (channelId: string) => void
+  onChannelsChanged?: (createdChannelId?: string) => Promise<void> | void
   userRole?: string
   username?: string
   onOpenAdminPanel?: () => void
@@ -24,21 +27,56 @@ export default function ChannelSidebar({
   channels, 
   currentChannel, 
   onChannelSelect, 
+  onChannelsChanged,
   userRole = 'user',
   username = 'Usuario',
   onOpenAdminPanel
 }: ChannelSidebarProps) {
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false)
   const [newChannelName, setNewChannelName] = useState('')
+  const [newChannelDescription, setNewChannelDescription] = useState('')
+  const [creatingChannel, setCreatingChannel] = useState(false)
+  const [createError, setCreateError] = useState('')
 
-  const handleCreateChannel = (e: React.FormEvent) => {
+  const handleCreateChannel = async (e: React.FormEvent) => {
     e.preventDefault()
     if (!newChannelName.trim()) return
 
-    // TODO: Implement channel creation
-    console.log('Creating channel:', newChannelName)
-    setNewChannelName('')
-    setIsCreateModalOpen(false)
+    setCreatingChannel(true)
+    setCreateError('')
+
+    try {
+      const response = await fetch('/api/channels', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: newChannelName,
+          description: newChannelDescription,
+          isPrivate: false,
+          inviteOnly: false,
+          isTemporary: true,
+          requiredRole: 'user'
+        })
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Unable to create channel')
+      }
+
+      setNewChannelName('')
+      setNewChannelDescription('')
+      setIsCreateModalOpen(false)
+
+      if (onChannelsChanged) {
+        await onChannelsChanged(data.channel?.id)
+      }
+    } catch (error) {
+      setCreateError(error instanceof Error ? error.message : 'Errore creazione canale')
+    } finally {
+      setCreatingChannel(false)
+    }
   }
 
   return (
@@ -62,8 +100,10 @@ export default function ChannelSidebar({
             </h2>
             <button
               onClick={() => setIsCreateModalOpen(true)}
+              disabled={userRole === 'guest'}
               className="p-1.5 rounded-md text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 
-                       hover:bg-gray-200 dark:hover:bg-gray-800 transition-colors"
+                       hover:bg-gray-200 dark:hover:bg-gray-800 transition-colors
+                       disabled:opacity-40 disabled:cursor-not-allowed"
               title="Create new channel"
             >
               <Plus className="w-4 h-4" />
@@ -105,6 +145,15 @@ export default function ChannelSidebar({
                   <div className="flex items-center gap-1">
                     {channel.isReadOnly && (
                       <Lock className={`w-3.5 h-3.5 ${isActive ? 'text-white' : 'text-amber-500'}`} />
+                    )}
+                    {channel.inviteOnly && (
+                      <Shield className={`w-3.5 h-3.5 ${isActive ? 'text-white' : 'text-sky-500'}`} />
+                    )}
+                    {channel.isPrivate && !channel.isReadOnly && (
+                      <KeyRound className={`w-3.5 h-3.5 ${isActive ? 'text-white' : 'text-rose-500'}`} />
+                    )}
+                    {channel.isTemporary && (
+                      <Clock3 className={`w-3.5 h-3.5 ${isActive ? 'text-white' : 'text-cyan-500'}`} />
                     )}
                   </div>
                 </button>
@@ -198,9 +247,36 @@ export default function ChannelSidebar({
                   autoFocus
                 />
                 <p className="mt-2 text-xs text-gray-500 dark:text-gray-400">
-                  Use lowercase letters, numbers, and hyphens
+                  Use lowercase letters, numbers, underscores, and hyphens
                 </p>
               </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Description
+                </label>
+                <input
+                  type="text"
+                  value={newChannelDescription}
+                  onChange={(e) => setNewChannelDescription(e.target.value)}
+                  placeholder="Temporary public channel for the team..."
+                  className="w-full px-4 py-2.5 rounded-lg border border-gray-300 dark:border-gray-600
+                           bg-white dark:bg-gray-700 text-gray-900 dark:text-white
+                           placeholder-gray-400 dark:placeholder-gray-500
+                           focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent
+                           transition-shadow"
+                />
+              </div>
+
+              <div className="rounded-lg bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 p-3 text-sm text-blue-900 dark:text-blue-100">
+                Members create public temporary channels from here. For private, invite-only, password-protected, or permanent channels use the admin panel or IRC commands.
+              </div>
+
+              {createError && (
+                <div className="rounded-lg bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 p-3 text-sm text-red-700 dark:text-red-200">
+                  {createError}
+                </div>
+              )}
               
               {/* Modal Footer */}
               <div className="flex items-center justify-end gap-3 pt-4">
@@ -214,12 +290,12 @@ export default function ChannelSidebar({
                 </button>
                 <button
                   type="submit"
-                  disabled={!newChannelName.trim()}
+                  disabled={!newChannelName.trim() || creatingChannel}
                   className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700
                            disabled:bg-gray-300 dark:disabled:bg-gray-700 disabled:cursor-not-allowed
                            rounded-lg transition-colors shadow-sm"
                 >
-                  Create Channel
+                  {creatingChannel ? 'Creating...' : 'Create Channel'}
                 </button>
               </div>
             </form>

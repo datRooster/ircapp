@@ -104,7 +104,7 @@ export default function MessageInput({
         {/* Security Badge */}
         <div className="mb-3 flex items-center gap-2 text-sm text-gray-600 dark:text-gray-400">
           <Lock className="w-4 h-4 text-green-600 dark:text-green-400" />
-          <span className="font-medium">Messages are end-to-end encrypted</span>
+          <span className="font-medium">Messages are encrypted in transit and at rest</span>
         </div>
         
         {/* Input Group */}
